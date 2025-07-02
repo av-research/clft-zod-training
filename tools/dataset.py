@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Dataloader python script
-
-Created on May 13rd, 2021
-
-TODO: get the iseauto dataset dataloder part done.
-"""
 import os
 import sys
 import cv2
@@ -19,14 +10,13 @@ import torch
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 
-from utils.helpers import waymo_anno_class_relabel
-from utils.helpers import waymo_anno_class_relabel_1
+from utils.helpers import waymo_anno_class_relabel, zod_anno_class_relabel
 from utils.lidar_process import open_lidar
 from utils.lidar_process import crop_pointcloud
 from utils.lidar_process import get_unresized_lid_img_val
 from utils.data_augment import DataAugment
 
-
+# Morpholoical dilation
 def lidar_dilation(X, Y, Z):
     kernel = np.ones((3, 3), np.uint8)
     X_dilation = cv2.dilate(np.array(X).astype(np.float32), kernel,
@@ -51,7 +41,8 @@ class Dataset(object):
         self.list_examples_cam = np.array(list_examples_file.read().splitlines())
         list_examples_file.close()
 
-        if split == 'train':  # only augment for training.
+        # Data augmentation
+        if split == 'train':
             self.p_flip = config['Dataset']['transforms']['p_flip']
             self.p_crop = config['Dataset']['transforms']['p_crop']
             self.p_rot = config['Dataset']['transforms']['p_rot']
@@ -61,13 +52,14 @@ class Dataset(object):
             self.p_rot = 0
 
         self.img_size = config['Dataset']['transforms']['resize']
+        # Normalization
         self.rgb_normalize = transforms.Compose([transforms.Resize((self.img_size, self.img_size),
                                                 interpolation=transforms.InterpolationMode.BILINEAR),
                                                 transforms.ToTensor(),
                                                 transforms.Normalize(
                                                 mean=config['Dataset']['transforms']['image_mean'],
-                                                std=config['Dataset']['transforms']['image_mean'])])
-
+                                                std=config['Dataset']['transforms']['image_std'])])
+        # Nearest-neighbor interpolation
         self.anno_resize = transforms.Resize((self.img_size, self.img_size),
                                              interpolation=transforms.InterpolationMode.NEAREST)
 
@@ -77,9 +69,20 @@ class Dataset(object):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        dataroot = './waymo_dataset/'
+        dataroot = './zod_dataset/'
 
-        if self.config['Dataset']['name'] == 'waymo':
+        if self.config['Dataset']['name'] == 'zod':
+            cam_path = os.path.join(dataroot, self.list_examples_cam[idx])
+            anno_path = cam_path.replace('/camera', '/annotation')
+            lidar_path = cam_path.replace('/camera', '/lidar').replace('.png', '.pkl')
+            rgb = Image.open(cam_path).convert('RGB')
+            anno_img = Image.open(anno_path)
+            anno = zod_anno_class_relabel(anno_img)
+            points_set, camera_coord = open_lidar(lidar_path, w_ratio=4, h_ratio=4,
+                                                  lidar_mean=self.config['Dataset']['transforms']['lidar_mean_zod'],
+                                                  lidar_std=self.config['Dataset']['transforms']['lidar_mean_zod'])
+
+        elif self.config['Dataset']['name'] == 'waymo':
             cam_path = os.path.join(dataroot, self.list_examples_cam[idx])
             anno_path = cam_path.replace('/camera', '/annotation')
             lidar_path = cam_path.replace('/camera', '/lidar').replace('.png', '.pkl')
@@ -105,15 +108,7 @@ class Dataset(object):
                                                   lidar_mean=self.config['Dataset']['transforms']['lidar_mean_iseauto'],
                                                   lidar_std=self.config['Dataset']['transforms']['lidar_mean_iseauto'])
 
-        else:
-            sys.exit("['Dataset']['name'] must be specified waymo or iseauto")
-
-        rgb_name = cam_path.split('/')[-1].split('.')[0]
-        anno_name = anno_path.split('/')[-1].split('.')[0]
-        lidar_name = lidar_path.split('/')[-1].split('.')[0]
-        assert (rgb_name == anno_name), "rgb and anno input not matching"
-        assert (rgb_name == lidar_name), "rgb and lidar input not matching"
-
+        # Augmentation
         # Crop the top part 1/2 of the input data
         rgb_orig = rgb.copy()
         w_orig, h_orig = rgb.size  # PIL tuple. (w, h)

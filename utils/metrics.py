@@ -156,3 +156,40 @@ def auc_ap(precision, recall):
                     prec_concat[diff_idx + 1])
 
     return auc_ap
+
+
+def find_overlap_zod(n_classes, output, anno, ignore_index=None):
+    '''
+    Computes per-class overlap, prediction, label, and union for ZOD dataset.
+    Ignores pixels with the given ignore_index (if provided).
+    :param n_classes: Number of valid classes (excluding ignore)
+    :param output: model output logits (B, C, H, W)
+    :param anno: annotation tensor (B, H, W)
+    :param ignore_index: class index to ignore in evaluation (e.g., 255 or 3)
+    :return: area_overlap, area_pred, area_label, area_union (all shape: [n_classes])
+    '''
+    with torch.no_grad():
+        _, pred_indices = torch.max(output, dim=1)  # (B, H, W)
+        if ignore_index is not None:
+            mask = (anno != ignore_index)
+        else:
+            mask = torch.ones_like(anno, dtype=torch.bool)
+        area_overlap = torch.zeros(n_classes, dtype=torch.float32, device=output.device)
+        area_pred = torch.zeros(n_classes, dtype=torch.float32, device=output.device)
+        area_label = torch.zeros(n_classes, dtype=torch.float32, device=output.device)
+        area_union = torch.zeros(n_classes, dtype=torch.float32, device=output.device)
+        for cls in range(n_classes):
+            pred_mask = (pred_indices == cls)
+            label_mask = (anno == cls)
+            valid_pred = pred_mask & mask
+            valid_label = label_mask & mask
+            intersection = (valid_pred & valid_label).sum().float()
+            pred_area = valid_pred.sum().float()
+            label_area = valid_label.sum().float()
+            union = pred_area + label_area - intersection
+            area_overlap[cls] = intersection
+            area_pred[cls] = pred_area
+            area_label[cls] = label_area
+            area_union[cls] = union
+        assert (area_overlap <= area_label).all(), "Intersection area should be smaller than Union area"
+        return area_overlap, area_pred, area_label, area_union
