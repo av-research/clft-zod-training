@@ -1,21 +1,21 @@
 {
     "General":{
         "device":"cuda:0",
-        "epochs":400,
-        "batch_size":24,
+        "epochs":4000,
+        "batch_size":8,
         "path_predicted_images":"output",
         "seed":0,
         "resume_training":false,
-        "resume_training_model_path": "/gpfs/mariana/smbhome/junygu/logs/17-11-2023/checkpoint_280.pth",
-	    "reset_lr":false,
-        "early_stop_patience": 50,
-        "save_epoch": 20,
-        "model_path":"./model_path/clft/clft_base_fusion_checkpoint_313.pth"
+        "resume_training_model_path": "./model_path/rgbcheckpoint_1.pth",
+        "reset_lr":false,
+        "early_stop_patience": 500,
+        "save_epoch": 100,
+        "model_path":"./model_path/rgbcheckpoint_59.pth"
     },
     "Log": {
-        "logdir_rgb": "/gpfs/mariana/smbhome/junygu/logs/14-11-2023/",
-        "logdir_lidar": "/gpfs/mariana/smbhome/junygu/logs/lidar/",
-        "logdir_fusion": "/gpfs/mariana/smbhome/junygu/logs/17-11-2013/"
+        "logdir_rgb": "./model_path/rgb/",
+        "logdir_lidar": "./model_path/lidar/",
+        "logdir_fusion": "./model_path/fusion/"
     },
     "CLFT": {
         "clft_lr": 8e-5,
@@ -36,7 +36,7 @@
         "lr_coefficient": 0.9
         },
     "Dataset":{
-        "name": "waymo",
+        "name": "zod",
         "transforms":{
             "resize":384,
             "random_rotate_range":20,
@@ -48,25 +48,16 @@
             "lidar_mean_waymo":[-0.17263354, 0.85321806, 24.5527253],
             "lidar_std_waymo":[7.34546552, 1.17227659, 15.83745082],
             "lidar_mean_iseauto":[-0.079, 0.033, 15.90],
-            "lidar_std_iseauto":[7.79,  2.156, 7.60]
+            "lidar_std_iseauto":[7.79,  2.156, 7.60],
+            "lidar_mean_zod":[-0.17263354, 0.85321806, 24.5527253],
+            "lidar_std_zod":[7.34546552, 1.17227659, 15.83745082]
         },
         "classes":{
-            "0": {
-                "name": "background",
-                "color": 0
-            },
-            "1": {
-                "name": "car",
-                "color": 1
-            },
-            "2": {
-                "name": "person",
-                "color": 2
-            },
-            "3": {
-                "name": "ignore",
-                "color": 3
-            }
+            "0": {"name": "background", "color": 0},
+            "1": {"name": "vehicle", "color": 1},
+            "2": {"name": "pedestrian", "color": 2},
+            "3": {"name": "cyclist", "color": 3},
+            "4": {"name": "sign", "color": 4}
         }
     }
 }

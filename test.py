@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 import sys
 import json
 import argparse
@@ -13,9 +11,9 @@ from tools.dataset import Dataset
 with open('config.json', 'r') as f:
     config = json.load(f)
 
-parser = argparse.ArgumentParser(description='CLFT and CLFCN Tresting')
+parser = argparse.ArgumentParser(description='CLFT Testing')
 parser.add_argument('-bb', '--backbone', required=True,
-                    choices=['clfcn', 'clft'],
+                    choices=['clft'],
                     help='Use the backbone of training, clft or clfcn')
 parser.add_argument('-m', '--mode', type=str, required=True,
                     choices=['rgb', 'lidar', 'cross_fusion'],
@@ -36,9 +34,6 @@ test_dataloader = DataLoader(test_data,
 
 if args.backbone == 'clft':
     tester.test_clft(test_dataloader, args.mode)
-
-elif args.backbone == 'clfcn':
-    tester.test_clfcn(test_dataloader, args.mode)
 
 else:
     sys.exit("A backbone must be specified! (clft or clfcn)")
