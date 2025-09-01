@@ -1,0 +1,52 @@
+services:
+  # CPU-only service (lightweight, fast build)
+  python-lite:
+    build:
+      context: .
+      dockerfile: Dockerfile.lite
+    image: python-lite:latest
+    container_name: python-lite
+    volumes:
+      - ./:/workspace
+      - data_zod:/data_zod  # Persistent data volume
+    environment:
+      - PYTHONPATH=/workspace
+    stdin_open: true
+    tty: true
+    ports:
+      - "8888:8888"
+    working_dir: /workspace
+
+  # GPU-enabled service with CUDA support
+  python-cuda:
+    build:
+      context: .
+      dockerfile: Dockerfile.cuda
+    image: python-cuda:latest
+    container_name: python-cuda
+    volumes:
+      - ./:/workspace
+      - data_zod:/data_zod  # Persistent data volume
+    environment:
+      - PYTHONPATH=/workspace
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_LAUNCH_BLOCKING=1
+      - TORCH_USE_CUDA_DSA=1
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    stdin_open: true
+    tty: true
+    ports:
+      - "8889:8888"  # Different port to avoid conflicts
+    working_dir: /workspace
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    shm_size: '16g'
+
+volumes:
+  data_zod:  # Named volume for persistent data storage

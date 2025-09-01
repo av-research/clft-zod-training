@@ -43,6 +43,14 @@ def creat_dir(config):
     if not os.path.exists(logdir_fusion + 'progress_save'):
         os.makedirs(logdir_fusion + 'progress_save')
 
+def zod_anno_class_relabel(anno_img):
+    anno_np = np.array(anno_img)
+    # 1 - Vehicles
+    # 2 - Pedestrians
+    # 3 - Cyclists
+    # 4 - Signs
+    anno_np[anno_np == 5] = 0  # Animals, ignore
+    return torch.from_numpy(anno_np).unsqueeze(0).long()
 
 def waymo_anno_class_relabel(annotation):
     """
@@ -149,9 +157,7 @@ def save_model_dict(config, epoch, model, modality, optimizer, save_check=False)
 
 def adjust_learning_rate_clft(config, optimizer, epoch):
     """Decay the learning rate based on schedule"""
-    epoch_max = config['General']['epochs']
     momentum = config['CLFT']['lr_momentum']
-    # lr = config['General']['dpt_lr'] * (1-epoch/epoch_max)**0.9
     lr = config['CLFT']['clft_lr'] * (momentum ** epoch)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr

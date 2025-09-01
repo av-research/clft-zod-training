@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 This is the script to load the all input frames to feed to model path file to compute the qualitative overlay results.
-Currently, it only works for CLFT model paths and Waymo dataset. It loads the config.json file for important
+Currently, it only works for CLFT model paths and Zod dataset. It loads the config.json file for important
 information, so you have to set the things like CLFT variants, model path, and other things in json file.
 If you want to see how it works for single input frame, you can refer the ipython notebook in
 ipython/make_qualitative_images.ipynb
-ONLY WORK FOR WAYMO DATASET
+ONLY WORK FOR ZOD DATASET
 
 updated on 29.09.2024.
 CLFCN is also working now. Remember to specify the clfcn model path in config.json
@@ -23,7 +23,7 @@ import torchvision.transforms.v2.functional as TF
 import json
 from clft.clft import CLFT
 from clfcn.fusion_net import FusionNet
-from utils.helpers import waymo_anno_class_relabel
+from utils.helpers import zod_anno_class_relabel
 from utils.lidar_process import open_lidar
 from utils.lidar_process import crop_pointcloud
 from utils.lidar_process import get_unresized_lid_img_val
@@ -70,7 +70,7 @@ class OpenInput(object):
         clft_anno_resize = transforms.Resize((384, 384), interpolation=transforms.InterpolationMode.NEAREST)
         anno = Image.open(anno_path)
 
-        anno = waymo_anno_class_relabel(anno)
+        anno = zod_anno_class_relabel(anno)
         # annotation = Image.open(
         #       '/home/claude/Data/claude_iseauto/labeled/night_fair/annotation_rgb/sq14_000061.png').\
         #          resize((480, 320), Image.BICUBIC).convert('F')
@@ -115,21 +115,12 @@ def run(modality, backbone, config):
     open_input = OpenInput(backbone,
                            cam_mean=config['Dataset']['transforms']['image_mean'],
                            cam_std=config['Dataset']['transforms']['image_mean'],
-                           lidar_mean=config['Dataset']['transforms']['lidar_mean_waymo'],
-                           lidar_std=config['Dataset']['transforms']['lidar_mean_waymo'],
+                           lidar_mean=config['Dataset']['transforms']['lidar_mean_zod'],
+                           lidar_std=config['Dataset']['transforms']['lidar_mean_zod'],
                            w_ratio=4,
                            h_ratio=4)
 
-    if backbone == 'clfcn':
-        model = FusionNet()
-        print(f'Using backbone {args.backbone}')
-        checkpoint = torch.load(config['General']['model_path'], map_location=device)
-
-        model.load_state_dict(checkpoint['model_state_dict'])
-        model.to(device)
-        model.eval()
-
-    elif backbone == 'clft':
+    if backbone == 'clft':
         resize = config['Dataset']['transforms']['resize']
         model = CLFT(
             RGB_tensor_size=(3, resize, resize),
@@ -159,7 +150,7 @@ def run(modality, backbone, config):
     data_list.close()
 
     i = 1
-    dataroot = './waymo_dataset/'
+    dataroot = './zod_dataset/'
     for path in data_cam:
         cam_path = os.path.join(dataroot, path)
         anno_path = cam_path.replace('/camera', '/annotation')
@@ -182,35 +173,19 @@ def run(modality, backbone, config):
                 segmented_image = draw_test_segmentation_map(output_seg)
                 seg_resize = cv2.resize(segmented_image, (480, 160))
 
-                seg_path = cam_path.replace('waymo_dataset/labeled', 'output/clft_seg_results/segment')
-                overlay_path = cam_path.replace('waymo_dataset/labeled', 'output/clft_seg_results/overlay')
+                seg_path = cam_path.replace('zod_dataset/labeled', 'output/zod/segment')
+                overlay_path = cam_path.replace('zod_dataset/labeled', 'output/zod/overlay')
+                os.makedirs(os.path.dirname(seg_path), exist_ok=True)
+                os.makedirs(os.path.dirname(overlay_path), exist_ok=True)
 
-                print(f'saving segment result {i}...')
+                print(f'saving segment result {i} at {os.path.abspath(seg_path)}')
                 cv2.imwrite(seg_path, seg_resize)
 
                 rgb_cv2 = cv2.imread(cam_path)
                 rgb_cv2_top = rgb_cv2[160:320, 0:480]
 
                 overlay = image_overlay(rgb_cv2_top, seg_resize)
-                print(f'saving overlay result {i}...')
-                cv2.imwrite(overlay_path, overlay)
-
-        elif backbone == 'clfcn':
-            with torch.no_grad():
-                output_seg = model(rgb, lidar, modality)
-                output_seg = output_seg[modality]
-                segmented_image = draw_test_segmentation_map(output_seg)
-
-                seg_path = cam_path.replace('waymo_dataset/labeled', 'output/clfcn_seg_results/segment')
-                overlay_path = cam_path.replace('waymo_dataset/labeled', 'output/clfcn_seg_results/overlay')
-
-                print(f'saving segment result {i}...')
-                cv2.imwrite(seg_path, segmented_image)
-
-                rgb_cv2 = cv2.imread(cam_path)
-                rgb_cv2_top = rgb_cv2[160:320, 0:480]
-                overlay = image_overlay(rgb_cv2_top, segmented_image)
-                print(f'saving overlay result {i}...')
+                print(f'saving overlay result {i} at {os.path.abspath(overlay_path)}')
                 cv2.imwrite(overlay_path, overlay)
 
         else:

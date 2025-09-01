@@ -22,7 +22,8 @@ def open_lidar(lidar_path, w_ratio, h_ratio, lidar_mean, lidar_std):
     camera_coord = lidar_data['camera_coordinates']
 
     # select camera front
-    mask = camera_coord[:, 0] == 1
+    #mask = camera_coord[:, 0] == 1
+    mask = camera_coord[:, 0] == 0 # Camera ID for ZOD is 0
     points3d = points3d[mask, :]
     camera_coord = camera_coord[mask, 1:3]
 
