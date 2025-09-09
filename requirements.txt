@@ -1,0 +1,16 @@
+transformers==4.56.1
+torch==2.8.0
+torchvision==0.23.0
+timm==1.0.19
+
+# Image processing
+Pillow==11.3.0
+scipy==1.16.1
+
+# Additional dependencies for CLFT and ZOD
+einops>=0.8.0
+zod>=0.1.0
+segment-anything>=1.0
+opencv-python>=4.8.0
+numpy>=2.0.0
+tqdm>=4.66.0
