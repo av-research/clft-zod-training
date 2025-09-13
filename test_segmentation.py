@@ -8,6 +8,8 @@ import numpy as np
 from tqdm import tqdm
 import json
 import pickle
+import sys
+import argparse
 
 import os
 import torch
@@ -17,7 +19,7 @@ import numpy as np
 from tqdm import tqdm
 import json
 
-from dataset import ZODDataset
+from dataset import GenericDataset
 from model import ViTSegmentation
 
 # Metric Calculation Functions
@@ -70,7 +72,7 @@ def calculate_metrics(pred, target, num_classes):
     }
 
 # Test Function
-def test_model(model, dataloader, num_classes=5, save_path=None, checkpoint_path=None):
+def test_model(model, dataloader, num_classes=5, save_path=None, checkpoint_path=None, class_names=None):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     model.eval()
@@ -101,7 +103,8 @@ def test_model(model, dataloader, num_classes=5, save_path=None, checkpoint_path
         total_metrics[key] /= count
     
     # Prepare results for JSON
-    class_names = ['background', 'vehicle', 'pedestrian', 'cyclist', 'sign']
+    if class_names is None:
+        class_names = ['class_' + str(i) for i in range(num_classes)]
     results = {
         'metadata': {
             'model': 'ViTSegmentation',
@@ -159,18 +162,27 @@ def test_model(model, dataloader, num_classes=5, save_path=None, checkpoint_path
 
 # Main Script
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Test segmentation model')
+    parser.add_argument('--dataset', type=str, default='zod', choices=['zod', 'waymo'], help='Dataset to use (zod or waymo)')
+    args = parser.parse_args()
+    
+    # Load config
+    config_file = f'config_{args.dataset}.json'
+    with open(config_file, 'r') as f:
+        config = json.load(f)
+    
     # Paths
-    data_dir = './zod_dataset'
-    split_file = './zod_dataset/splits_zod/all.txt'  # Or use a test split if available
-    checkpoint_path = './model_path/checkpoint_epoch_1000_cross_fusion.pth'  # Use overtrained model
-    results_save_path = './model_results/test_results.json'
+    data_dir = config['data_dir']
+    split_file = config['split_file']
+    checkpoint_path = config['checkpoint_path']
+    results_save_path = config['results_save_path']
     
     # Dataset and Dataloader
-    dataset = ZODDataset(data_dir, split_file)
-    dataloader = DataLoader(dataset, batch_size=2, shuffle=False)
+    dataset = GenericDataset(config)
+    dataloader = DataLoader(dataset, batch_size=config['test_batch_size'], shuffle=False)
     
     # Model
-    model = ViTSegmentation(mode='cross_fusion', num_classes=5)
+    model = ViTSegmentation(config['mode'], config['num_classes'])
 
     # Load checkpoint
     if os.path.exists(checkpoint_path):
@@ -178,7 +190,7 @@ if __name__ == '__main__':
         model.load_state_dict(checkpoint['model_state_dict'])
         print(f"Loaded checkpoint from {checkpoint_path}")
     else:
-        print(f"Checkpoint not found at {checkpoint_path}, using untrained model")
+        sys.exit(f"Checkpoint not found at {checkpoint_path}. Please provide a valid checkpoint path in config.")
     
     # Test and save results
-    test_model(model, dataloader, save_path=results_save_path, checkpoint_path=checkpoint_path)
+    test_model(model, dataloader, num_classes=config['num_classes'], save_path=results_save_path, checkpoint_path=checkpoint_path, class_names=config['class_names'])

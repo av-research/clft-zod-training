@@ -4,28 +4,26 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import json
 import argparse
 
-from dataset import ZODDataset
+from dataset import GenericDataset
 from model import ViTSegmentation
 from test_segmentation import test_model
 
 # Training Function
-def train_model(model, dataloader, num_epochs, lr, save_dir, mode, starting_epoch=0):
+def train_model(model, dataloader, config, starting_epoch=0):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     
-    # Formula: weight_i = 1 / (freq_i / total_pixels), then normalized so sum(weights) = num_classes
-    # Classes (in order): [background, vehicle, pedestrian, cyclist, sign]
-    # Frequencies: [~95%, ~2.8%, ~1.7%, ~2.3%, ~1.9%] (approximate from ZOD dataset analysis)
-    class_weights = torch.tensor([0.0120, 0.0575, 0.3580, 0.2603, 0.3122]).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
+    class_weights = torch.tensor(config['class_weights'], dtype=torch.float).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=config['lr'], weight_decay=1e-4)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config['num_epochs'], eta_min=1e-6)
     criterion = nn.CrossEntropyLoss(weight=class_weights)
     
-    os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(config['save_dir'], exist_ok=True)
     
-    for epoch in range(starting_epoch, num_epochs):
+    for epoch in range(starting_epoch, config['num_epochs']):
         model.train()
         epoch_loss = 0
         batch_count = 0
@@ -62,10 +60,10 @@ def train_model(model, dataloader, num_epochs, lr, save_dir, mode, starting_epoc
             batch_count += 1
         
         avg_loss = epoch_loss / len(dataloader)
-        print(f'Epoch {epoch+1}/{num_epochs}, Loss: {avg_loss:.4f}')
+        print(f'Epoch {epoch+1}/{config["num_epochs"]}, Loss: {avg_loss:.4f}')
         
         # Periodic gradient checks during training
-        if (epoch + 1) % 100 == 0:  # Every 10 epochs
+        if (epoch + 1) % config['gradient_check_interval'] == 0:  # Every X epochs
             print("Gradient checks at epoch", epoch + 1)
             vit_grads = []
             fusion_grads = []
@@ -95,52 +93,72 @@ def train_model(model, dataloader, num_epochs, lr, save_dir, mode, starting_epoc
         # Step the scheduler
         scheduler.step()
         
-        # Save checkpoint every 10 epochs
-        if (epoch + 1) % 100 == 0:
-            checkpoint_path = os.path.join(save_dir, f'checkpoint_epoch_{epoch+1}_{mode}.pth')
+        # Save checkpoint every checkpoint_interval epochs
+        if (epoch + 1) % config['checkpoint_interval'] == 0:
+            checkpoint_path = os.path.join(config['save_dir'], f'checkpoint_epoch_{epoch+1}_{config["mode"]}.pth')
             torch.save({
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
                 'loss': avg_loss,
-                'mode': mode
+                'mode': config['mode']
             }, checkpoint_path)
             print(f'Checkpoint saved: {checkpoint_path}')
             
             # Run test and save results
             print(f"Running test at epoch {epoch + 1}...")
-            results_save_path = f'./model_results/test_results_epoch_{epoch+1}_{mode}.json'
-            test_model(model, dataloader, num_classes=5, save_path=results_save_path, checkpoint_path=checkpoint_path)
+            results_save_path = f'./model_results/test_results_epoch_{epoch+1}_{config["mode"]}.json'
+            test_model(model, dataloader, num_classes=config['num_classes'], save_path=results_save_path, checkpoint_path=checkpoint_path, class_names=config['class_names'])
 
 # Main Script
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Train ViT Segmentation Model')
+    parser = argparse.ArgumentParser(description='Train segmentation model')
+    parser.add_argument('--dataset', type=str, default='zod', choices=['zod', 'waymo'], help='Dataset to use (zod or waymo)')
     args = parser.parse_args()
     
     os.makedirs('./model_results', exist_ok=True)
     
-    # Paths (adjust as needed)
-    data_dir = './zod_dataset'
-    split_file = './zod_dataset/splits_zod/all.txt'  # Use all.txt for full dataset
+    # Load dataset configuration from JSON
+    config_file = f'config_{args.dataset}.json'
+    with open(config_file, 'r') as f:
+        config = json.load(f)
+    
+    data_dir = config['data_dir']
+    split_file = config['split_file']
+    preload = config['preload']
+    batch_size = config['batch_size']
+    checkpoint_path = config['checkpoint_path']
+    num_classes = config['num_classes']
+    checkpoint_interval = config['checkpoint_interval']
+    class_weights = config['class_weights']
+    lidar_mean = config['lidar_mean']
+    lidar_std = config['lidar_std']
+    rgb_mean = config['rgb_mean']
+    rgb_std = config['rgb_std']
+    num_epochs = config['num_epochs']
+    lr = config['lr']
+    save_dir = config['save_dir']
+    mode = config['mode']
+    camera_mask_value = config['camera_mask_value']
     
     # Dataset and Dataloader
-    dataset = ZODDataset(data_dir, split_file)
-    dataloader = DataLoader(dataset, batch_size=12, shuffle=True, num_workers=4, pin_memory=True, prefetch_factor=2, persistent_workers=True)
+    dataset = GenericDataset(config)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, pin_memory=True, prefetch_factor=4, persistent_workers=True)
     
     # Hardcoded mode
-    mode = 'cross_fusion'
-    model = ViTSegmentation(mode, num_classes=5)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    model = ViTSegmentation(mode, num_classes=num_classes)
     
     # Resume from checkpoint if exists
-    checkpoint_path = './model_path/checkpoint_epoch_430_cross_fusion.pth'
-    starting_epoch = 0
+    starting_epoch = config.get('starting_epoch', 0)
     if os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
         model.load_state_dict(checkpoint['model_state_dict'])
-        starting_epoch = checkpoint.get('epoch', 0)
-        print(f"Resumed training from epoch {starting_epoch}")
+        # Note: starting_epoch is set from config, not from checkpoint
+        print(f"Loaded model from checkpoint, starting from epoch {starting_epoch}")
     
-    print(f"Training with mode: {mode}")
+    print(f"Training on {args.dataset.upper()} dataset with mode: {config['mode']}")
     
-    train_model(model, dataloader, num_epochs=1000, lr=8e-5, save_dir='./model_path', mode=mode, starting_epoch=starting_epoch)
+    train_model(model, dataloader, config, starting_epoch=starting_epoch)

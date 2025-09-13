@@ -8,7 +8,7 @@ import pickle
 from tqdm import tqdm
 
 # LiDAR processing functions
-def open_lidar(lidar_path, w_ratio, h_ratio, lidar_mean, lidar_std):
+def open_lidar(lidar_path, w_ratio, h_ratio, lidar_mean, lidar_std, camera_mask_value=0):
     mean_lidar = np.array(lidar_mean)
     std_lidar = np.array(lidar_std)
 
@@ -19,8 +19,7 @@ def open_lidar(lidar_path, w_ratio, h_ratio, lidar_mean, lidar_std):
     points3d = lidar_data['3d_points']
     camera_coord = lidar_data['camera_coordinates']
 
-    # select camera front - ZOD uses camera ID 0
-    mask = camera_coord[:, 0] == 0
+    mask = camera_coord[:, 0] == camera_mask_value
     points3d = points3d[mask, :]
     camera_coord = camera_coord[mask, 1:3]
 
@@ -57,58 +56,90 @@ def get_unresized_lid_img_val(h, w, points_set, camera_coord):
 
     return X, Y, Z
 
-class ZODDataset(Dataset):
-    def __init__(self, data_dir, split_file, transform=None):
-        self.data_dir = data_dir
+class GenericDataset(Dataset):
+    def __init__(self, config, transform=None):
+        self.data_dir = config['data_dir']
         self.transform = transform
-        with open(split_file, 'r') as f:
+        with open(config['split_file'], 'r') as f:
             self.samples = f.read().splitlines()
         
-        # Normalization stats (from config) - using ZOD values
-        self.lidar_mean = [-3.09753510, 0.90678186, 0.35993957]
-        self.lidar_std = [26.67301113, 33.51497128, 3.22479150]
-        self.rgb_mean = [0.485, 0.456, 0.406]
-        self.rgb_std = [0.229, 0.224, 0.225]
+        # Normalization stats
+        self.lidar_mean = config['lidar_mean']
+        self.lidar_std = config['lidar_std']
+        self.rgb_mean = config['rgb_mean']
+        self.rgb_std = config['rgb_std']
+        self.camera_mask_value = config['camera_mask_value']
         
         # Resize transform
         self.resize = transforms.Resize((384, 384))
         
-        # Preload all data into memory for speed
-        self.data = []
-        print("Preloading dataset into memory...")
-        for sample in tqdm(self.samples, desc="Loading samples"):
-            try:
-                # Load RGB
-                rgb_path = os.path.join(self.data_dir, sample)
-                rgb = Image.open(rgb_path).convert('RGB')
-                rgb = self.resize(rgb)
-                rgb = transforms.ToTensor()(rgb)
-                rgb = transforms.Normalize(self.rgb_mean, self.rgb_std)(rgb)
-                
-                # Load LiDAR
-                lidar_path = sample.replace('camera', 'lidar').replace('.png', '.pkl')
-                lidar_path = os.path.join(self.data_dir, lidar_path)
-                points_set, camera_coord = open_lidar(lidar_path, w_ratio=4, h_ratio=4,
-                                                      lidar_mean=self.lidar_mean,
-                                                      lidar_std=self.lidar_std)
-                X, Y, Z = get_unresized_lid_img_val(384, 384, points_set, camera_coord)
-                lidar = torch.cat((X, Y, Z), 0)
-                lidar = transforms.Normalize(self.lidar_mean, self.lidar_std)(lidar)
-                
-                # Load annotation
-                anno_path = sample.replace('camera', 'annotation')
-                anno_path = os.path.join(self.data_dir, anno_path)
-                anno = Image.open(anno_path)
-                anno = self.resize(anno)
-                anno = torch.from_numpy(np.array(anno)).long()
-                
-                self.data.append((rgb, lidar, anno))
-            except Exception as e:
-                print(f"Error loading sample {sample}: {e}. Skipping.")
-        print(f"Preloaded {len(self.data)} samples.")
+        self.preload = config['preload']
+        if self.preload and len(self.samples) <= 100:  # Preload only for small datasets
+            # Preload all data into memory for speed
+            self.data = []
+            print("Preloading dataset into memory...")
+            for sample in tqdm(self.samples, desc="Loading samples"):
+                try:
+                    rgb_path, lidar_path, anno_path = self._get_paths(sample)
+                    rgb = self._load_rgb(rgb_path)
+                    lidar = self._load_lidar(lidar_path)
+                    anno = self._load_anno(anno_path)
+                    self.data.append((rgb, lidar, anno))
+                except Exception as e:
+                    print(f"Error loading sample {sample}: {e}. Skipping.")
+            print(f"Preloaded {len(self.data)} samples.")
+        else:
+            self.data = None  # Will load on-the-fly
+
+    def _get_paths(self, sample):
+        rgb_path = os.path.join(self.data_dir, sample)
+        lidar_path = sample.replace('/camera/', '/lidar/').replace('.png', '.pkl')
+        lidar_path = os.path.join(self.data_dir, lidar_path)
+        anno_path = sample.replace('/camera/', '/annotation/')
+        anno_path = os.path.join(self.data_dir, anno_path)
+        return rgb_path, lidar_path, anno_path
+
+    def _load_rgb(self, rgb_path):
+        rgb = Image.open(rgb_path).convert('RGB')
+        rgb = self.resize(rgb)
+        rgb = transforms.ToTensor()(rgb)
+        rgb = transforms.Normalize(self.rgb_mean, self.rgb_std)(rgb)
+        return rgb
+
+    def _load_lidar(self, lidar_path):
+        points_set, camera_coord = open_lidar(lidar_path, w_ratio=4, h_ratio=4,
+                                              lidar_mean=self.lidar_mean,
+                                              lidar_std=self.lidar_std,
+                                              camera_mask_value=self.camera_mask_value)
+        X, Y, Z = get_unresized_lid_img_val(384, 384, points_set, camera_coord)
+        lidar = torch.cat((X, Y, Z), 0)
+        lidar = transforms.Normalize(self.lidar_mean, self.lidar_std)(lidar)
+        return lidar
+
+    def _load_anno(self, anno_path):
+        anno = Image.open(anno_path)
+        anno = self.resize(anno)
+        anno = torch.from_numpy(np.array(anno)).long()
+        return anno
 
     def __len__(self):
-        return len(self.data)
+        return len(self.samples) if self.data is None else len(self.data)
+
+    def _load_sample(self, sample):
+        rgb_path, lidar_path, anno_path = self._get_paths(sample)
+        rgb = self._load_rgb(rgb_path)
+        lidar = self._load_lidar(lidar_path)
+        anno = self._load_anno(anno_path)
+        return rgb, lidar, anno
 
     def __getitem__(self, idx):
-        return self.data[idx]
+        if self.data is not None:
+            return self.data[idx]
+        
+        sample = self.samples[idx]
+        
+        try:
+            return self._load_sample(sample)
+        except Exception as e:
+            print(f"Error loading sample {sample}: {e}")
+            raise e

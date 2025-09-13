@@ -14,19 +14,12 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision import transforms
+import json
+import sys
+import argparse
 
-from dataset import ZODDataset
+from dataset import GenericDataset
 from model import ViTSegmentation
-
-# Class colors for visualization
-CLASS_COLORS = {
-    0: [0, 0, 0],      # background: black
-    1: [255, 0, 0],    # vehicle: red
-    2: [0, 255, 0],    # pedestrian: green
-    3: [0, 0, 255],    # cyclist: blue
-    4: [255, 255, 0]   # sign: yellow
-}
-CLASS_NAMES = ['background', 'vehicle', 'pedestrian', 'cyclist', 'sign']
 
 def mask_to_image(mask, colors):
     """Convert class mask to RGB image."""
@@ -50,7 +43,7 @@ def create_comparison(gt_mask, pred_mask):
     
     return comp
 
-def visualize_sample(rgb, gt_mask, pred_mask, sample_name, save_dir):
+def visualize_sample(rgb, gt_mask, pred_mask, sample_name, save_dir, class_colors):
     """Save visualizations for one sample."""
     os.makedirs(save_dir, exist_ok=True)
     
@@ -63,11 +56,11 @@ def visualize_sample(rgb, gt_mask, pred_mask, sample_name, save_dir):
     Image.fromarray(rgb_img).save(os.path.join(save_dir, f'{base_name}_rgb.png'))
     
     # Ground truth mask
-    gt_img = mask_to_image(gt_mask.cpu().numpy(), CLASS_COLORS)
+    gt_img = mask_to_image(gt_mask.cpu().numpy(), class_colors)
     Image.fromarray(gt_img).save(os.path.join(save_dir, f'{base_name}_gt.png'))
     
     # Prediction mask
-    pred_img = mask_to_image(pred_mask.cpu().numpy(), CLASS_COLORS)
+    pred_img = mask_to_image(pred_mask.cpu().numpy(), class_colors)
     Image.fromarray(pred_img).save(os.path.join(save_dir, f'{base_name}_pred.png'))
     
     # Comparison
@@ -75,28 +68,41 @@ def visualize_sample(rgb, gt_mask, pred_mask, sample_name, save_dir):
     Image.fromarray(comp_img).save(os.path.join(save_dir, f'{base_name}_comparison.png'))
 
 def main():
+    parser = argparse.ArgumentParser(description='Visualize segmentation results')
+    parser.add_argument('--dataset', type=str, default='zod', choices=['zod', 'waymo'], help='Dataset to use (zod or waymo)')
+    args = parser.parse_args()
+    
+    # Load config
+    config_file = f'config_{args.dataset}.json'
+    with open(config_file, 'r') as f:
+        config = json.load(f)
+    
     # Paths
-    data_dir = './zod_dataset'
-    split_file = './zod_dataset/splits_zod/all.txt'
-    checkpoint_path = './model_path/checkpoint_epoch_1000_cross_fusion.pth'
-    save_dir = './model_results'
+    data_dir = config['data_dir']
+    split_file = config['split_file']
+    checkpoint_path = config['checkpoint_path']
+    save_dir = config['save_dir']
     
     # Dataset
-    dataset = ZODDataset(data_dir, split_file)
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+    dataset = GenericDataset(config)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)
     
     # Model
-    model = ViTSegmentation(mode='cross_fusion', num_classes=5)
+    model = ViTSegmentation(config['mode'], config['num_classes'])
     if os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
         model.load_state_dict(checkpoint['model_state_dict'])
         print(f"Loaded checkpoint: {checkpoint_path}")
     else:
-        print("No checkpoint found, using untrained model")
+        sys.exit("No checkpoint found. Please provide a valid checkpoint path in config.")
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     model.eval()
+    
+    # Class info from config
+    CLASS_COLORS = {i: tuple(color) for i, color in enumerate(config['class_colors'])}
+    CLASS_NAMES = config['class_names']
     
     # Visualize
     with torch.no_grad():
@@ -108,8 +114,8 @@ def main():
             pred_mask = torch.argmax(pred, dim=1).squeeze(0)
             
             sample_name = dataset.samples[i]
-            visualize_sample(rgb.squeeze(0), anno.squeeze(0), pred_mask, sample_name, save_dir)
-            print(f"Saved visualizations for {sample_name}")
+            visualize_sample(rgb.squeeze(0), anno.squeeze(0), pred_mask, sample_name, save_dir, CLASS_COLORS)
+            print(f"Saved visualizations for {sample_name} ({i+1}/{len(dataset)})")
 
 if __name__ == '__main__':
     main()
