@@ -10,6 +10,8 @@ import json
 import pickle
 import sys
 import argparse
+from datetime import datetime
+import platform
 
 import os
 import torch
@@ -72,7 +74,7 @@ def calculate_metrics(pred, target, num_classes):
     }
 
 # Test Function
-def test_model(model, dataloader, num_classes=5, save_path=None, checkpoint_path=None, class_names=None):
+def test_model(model, dataloader, num_classes=5, save_path=None, checkpoint_path=None, class_names=None, mode='cross_fusion'):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     model.eval()
@@ -89,7 +91,7 @@ def test_model(model, dataloader, num_classes=5, save_path=None, checkpoint_path
         for rgb, lidar, anno in tqdm(dataloader):
             rgb, lidar, anno = rgb.to(device), lidar.to(device), anno.to(device)
             
-            outputs = model(rgb, lidar)
+            outputs = model(rgb, lidar, mode)
             pred = torch.argmax(outputs, dim=1)  # [batch, H, W]
             
             for i in range(pred.size(0)):
@@ -105,17 +107,39 @@ def test_model(model, dataloader, num_classes=5, save_path=None, checkpoint_path
     # Prepare results for JSON
     if class_names is None:
         class_names = ['class_' + str(i) for i in range(num_classes)]
+    
+    timestamp = datetime.now().isoformat()
     results = {
         'metadata': {
+            'timestamp': timestamp,
             'model': 'ViTSegmentation',
             'num_classes': num_classes,
             'checkpoint': checkpoint_path.replace('./model_path/', '') if checkpoint_path else 'unknown',
             'test_samples': count,
-            'device': str(device)
+            'device': str(device),
+            'pytorch_version': torch.__version__,
+            'platform': platform.platform(),
+            'python_version': platform.python_version(),
+            'class_names': class_names
+        },
+        'training_info': {
+            'epoch': None,  # Will be extracted from checkpoint name if available
+            'mode': None
         },
         'per_class_metrics': {},
         'mean_metrics': {}
     }
+    
+    # Extract epoch and mode from checkpoint path if available
+    if checkpoint_path:
+        try:
+            import re
+            match = re.search(r'checkpoint_epoch_(\d+)_(\w+)\.pth', checkpoint_path)
+            if match:
+                results['training_info']['epoch'] = int(match.group(1))
+                results['training_info']['mode'] = match.group(2)
+        except:
+            pass
     
     # Per-class results
     for cls in range(num_classes):
@@ -160,6 +184,78 @@ def test_model(model, dataloader, num_classes=5, save_path=None, checkpoint_path
     
     return results
 
+# Comprehensive testing function for multiple conditions
+def test_all_conditions(model, config, checkpoint_path, epoch=None, results_prefix="test_results"):
+    """
+    Test model on all 4 conditions and save separate results.
+    
+    Args:
+        model: The model to test
+        config: Configuration dictionary
+        checkpoint_path: Path to the checkpoint file
+        epoch: Optional epoch number for filename generation
+        results_prefix: Prefix for results filename
+    """
+    # Define test conditions for comprehensive evaluation
+    test_conditions = [
+        'test_day_fair',
+        'test_day_rain', 
+        'test_night_fair',
+        'test_night_rain'
+    ]
+    
+    results_summary = {}
+    
+    for condition in test_conditions:
+        print(f"\n{'='*60}")
+        print(f"Testing on {condition.upper()}")
+        print(f"{'='*60}")
+        
+        # Create test config for specific condition
+        test_config = config.copy()
+        test_config['split_file'] = test_config['split_file'].replace('train_all.txt', f'{condition}.txt')
+        
+        # Check if test file exists
+        if not os.path.exists(test_config['split_file']):
+            print(f"Warning: Test file {test_config['split_file']} not found, skipping {condition}")
+            continue
+        
+        # Create test dataset and dataloader for this condition
+        test_dataset = GenericDataset(test_config, training=False)
+        test_dataloader = DataLoader(test_dataset, batch_size=config.get('batch_size', 2), shuffle=False, num_workers=4, pin_memory=True)
+        
+        # Generate condition-specific results file name
+        if epoch is not None:
+            results_save_path = f'./model_results/{results_prefix}_epoch_{epoch}_{config["mode"]}_{condition}.json'
+        else:
+            results_save_path = f'./model_results/{results_prefix}_{config["mode"]}_{condition}.json'
+        
+        # Run test for this condition
+        print(f"Running evaluation on {len(test_dataset)} samples...")
+        results = test_model(model, test_dataloader, 
+                           num_classes=config['num_classes'], 
+                           save_path=results_save_path, 
+                           checkpoint_path=checkpoint_path, 
+                           class_names=config['class_names'],
+                           mode=config['mode'])
+        
+        results_summary[condition] = results['mean_metrics']
+    
+    # Print summary of all conditions
+    if results_summary:
+        print(f"\n{'='*60}")
+        print("SUMMARY - All Test Conditions")
+        print(f"{'='*60}")
+        for condition, metrics in results_summary.items():
+            print(f"{condition.upper()}:")
+            print(f"  Mean IoU: {metrics['mean_iou']:.4f}")
+            print(f"  Mean Precision: {metrics['mean_precision']:.4f}")
+            print(f"  Mean Recall: {metrics['mean_recall']:.4f}")
+            print(f"  Mean Accuracy: {metrics['mean_accuracy']:.4f}")
+            print()
+    
+    return results_summary
+
 # Main Script
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Test segmentation model')
@@ -171,15 +267,19 @@ if __name__ == '__main__':
     with open(config_file, 'r') as f:
         config = json.load(f)
     
-    # Paths
+    # Paths - Use proper test split for evaluation
     data_dir = config['data_dir']
     split_file = config['split_file']
     checkpoint_path = config['checkpoint_path']
     results_save_path = config['results_save_path']
     
-    # Dataset and Dataloader
-    dataset = GenericDataset(config)
-    dataloader = DataLoader(dataset, batch_size=config['test_batch_size'], shuffle=False)
+    # Define test conditions for comprehensive evaluation
+    test_conditions = [
+        'test_day_fair',
+        'test_day_rain', 
+        'test_night_fair',
+        'test_night_rain'
+    ]
     
     # Model
     model = ViTSegmentation(config['mode'], config['num_classes'])
@@ -192,5 +292,5 @@ if __name__ == '__main__':
     else:
         sys.exit(f"Checkpoint not found at {checkpoint_path}. Please provide a valid checkpoint path in config.")
     
-    # Test and save results
-    test_model(model, dataloader, num_classes=config['num_classes'], save_path=results_save_path, checkpoint_path=checkpoint_path, class_names=config['class_names'])
+    # Run comprehensive testing on all conditions
+    test_all_conditions(model, config, checkpoint_path, results_prefix="test_results")
