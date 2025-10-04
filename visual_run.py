@@ -17,8 +17,8 @@ import torch
 import argparse
 import numpy as np
 from PIL import Image
-import torchvision.transforms.v2 as transforms
-import torchvision.transforms.v2.functional as TF
+import torchvision.transforms as transforms
+import torchvision.transforms.functional as TF
 
 import json
 from clft.clft import CLFT
@@ -122,8 +122,8 @@ def run(modality, backbone, config):
 
     if backbone == 'clfcn':
         model = FusionNet()
-        print(f'Using backbone {args.backbone}')
-        checkpoint = torch.load(config['General']['model_path'], map_location=device)
+        print(f'Using backbone {backbone}')
+        checkpoint = torch.load(config['Visualize']['model_path'], map_location=device)
 
         model.load_state_dict(checkpoint['model_state_dict'])
         model.to(device)
@@ -144,9 +144,9 @@ def run(modality, backbone, config):
             type=config['CLFT']['type'],
             model_timm=config['CLFT']['model_timm'],
             )
-        print(f'Using backbone {args.backbone}')
+        print(f'Using backbone {backbone}')
 
-        model_path = config['General']['model_path']
+        model_path = config['Visualize']['model_path']
         model.load_state_dict(torch.load(model_path, map_location=device)['model_state_dict'])
         model.to(device)
         model.eval()
@@ -154,7 +154,12 @@ def run(modality, backbone, config):
     else:
         sys.exit("A backbone must be specified! (clft or clfcn)")
 
-    data_list = open(args.path, 'r')
+    test_data_path = config['CLI']['path']
+    test_data_files = [
+        'all.txt'
+    ]
+    path = test_data_path + test_data_files[0]
+    data_list = open(path, 'r')
     data_cam = np.array(data_list.read().splitlines())
     data_list.close()
 
@@ -182,17 +187,18 @@ def run(modality, backbone, config):
                 segmented_image = draw_test_segmentation_map(output_seg)
                 seg_resize = cv2.resize(segmented_image, (480, 160))
 
-                seg_path = cam_path.replace('waymo_dataset/labeled', 'output/clft_seg_results/segment')
-                overlay_path = cam_path.replace('waymo_dataset/labeled', 'output/clft_seg_results/overlay')
-
-                print(f'saving segment result {i}...')
+                seg_path = cam_path.replace('waymo_dataset/labeled', f'output/{config['ID']}/clft_seg_results/segment')
+                overlay_path = cam_path.replace('waymo_dataset/labeled', f'output/{config['ID']}/clft_seg_results/overlay')
+                os.makedirs(os.path.dirname(seg_path), exist_ok=True)
+                os.makedirs(os.path.dirname(overlay_path), exist_ok=True)
+                print(f'saving segment result {i} to {seg_path}')
                 cv2.imwrite(seg_path, seg_resize)
 
                 rgb_cv2 = cv2.imread(cam_path)
                 rgb_cv2_top = rgb_cv2[160:320, 0:480]
 
                 overlay = image_overlay(rgb_cv2_top, seg_resize)
-                print(f'saving overlay result {i}...')
+                print(f'saving overlay result {i} to {overlay_path}')
                 cv2.imwrite(overlay_path, overlay)
 
         elif backbone == 'clfcn':
@@ -217,20 +223,18 @@ def run(modality, backbone, config):
             sys.exit("A backbone must be specified! (clft or clfcn)")
         i += 1
 
-
+# Run script:
+# python visual_run.py --config ./config/config_1.json
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='visual run script')
-    parser.add_argument('-m', '--mode', type=str, required=True,
-                        choices=['rgb', 'lidar', 'cross_fusion'],
-                        help='Output mode (lidar, rgb or cross_fusion)')
-    parser.add_argument('-bb', '--backbone', required=True,
-                        choices=['clfcn', 'clft'],
-                        help='Use the backbone of training, clft or clfcn')
-    parser.add_argument('-p', '--path', type=str, required=True,
-                        help='The path of the text file to visualize')
+    parser = argparse.ArgumentParser(description='Visual Run Script')
+    parser.add_argument('-c', '--config', type=str, required=False, default='config.json', help='The path of the config file')
     args = parser.parse_args()
+    config_file = args.config
 
-    with open('config.json', 'r') as f:
-        configs = json.load(f)
+    with open(config_file, 'r') as f:
+        config = json.load(f)
 
-    run(args.mode, args.backbone, configs)
+    mode = config['CLI']['mode']
+    backbone = config['CLI']['backbone']
+
+    run(mode, backbone, config)

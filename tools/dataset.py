@@ -27,6 +27,39 @@ from utils.lidar_process import get_unresized_lid_img_val
 from utils.data_augment import DataAugment
 
 
+def get_splitted_dataset(config, split, data_category, paths_rgb):
+    list_files = [os.path.basename(im) for im in paths_rgb]
+    np.random.seed(config['General']['seed'])
+    np.random.shuffle(list_files)
+    if split == 'train':
+        selected_files = list_files[:int(len(list_files)*\
+                                config['Dataset']['splits']['split_train'])]
+#        print(selected_files)
+    elif split == 'val':
+        selected_files = list_files[
+            int(len(list_files)*config['Dataset']['splits']['split_train']):
+            int(len(list_files)*config['Dataset']['splits']['split_train']) +
+            int(len(list_files)*config['Dataset']['splits']['split_val'])]
+    else:
+        selected_files = list_files[
+            int(len(list_files)*config['Dataset']['splits']['split_train']) +
+            int(len(list_files)*config['Dataset']['splits']['split_val']):]
+
+    paths_rgb = [os.path.join(config['Dataset']['paths']['path_dataset'],
+                              data_category,
+                              config['Dataset']['paths']['path_rgb'],
+                              im[:-4]+'.png') for im in selected_files]
+    paths_lidar = [os.path.join(config['Dataset']['paths']['path_dataset'],
+                                data_category,
+                                config['Dataset']['paths']['path_lidar'],
+                                im[:-4]+'.pkl') for im in selected_files]
+    paths_anno = [os.path.join(config['Dataset']['paths']['path_dataset'],
+                               data_category,
+                               config['Dataset']['paths']['path_anno'],
+                               im[:-4]+'.png') for im in selected_files]
+    return paths_rgb, paths_lidar, paths_anno
+
+
 def lidar_dilation(X, Y, Z):
     kernel = np.ones((3, 3), np.uint8)
     X_dilation = cv2.dilate(np.array(X).astype(np.float32), kernel,
@@ -77,33 +110,21 @@ class Dataset(object):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        dataroot = './waymo_dataset/'
+        dataroot = './zod_dataset/'
 
-        if self.config['Dataset']['name'] == 'waymo':
+        if self.config['Dataset']['name'] == 'zod':
             cam_path = os.path.join(dataroot, self.list_examples_cam[idx])
             anno_path = cam_path.replace('/camera', '/annotation')
             lidar_path = cam_path.replace('/camera', '/lidar').replace('.png', '.pkl')
 
-            # waymo rgb and anno is in 480x320, lidar is in 1920x1280
+            # zod rgb and anno is in 480x320, lidar is in 1920x1280
             rgb = Image.open(cam_path).convert('RGB')
 
             # Here there are two class relabel functions, go to /utils/helper.py for details.
-            anno = waymo_anno_class_relabel(Image.open(anno_path))  # Tensor [1, H, W]
+            anno = waymo_anno_class_relabel_1(Image.open(anno_path))  # Tensor [1, H, W]
             points_set, camera_coord = open_lidar(lidar_path, w_ratio=4, h_ratio=4,
-                                                  lidar_mean=self.config['Dataset']['transforms']['lidar_mean_waymo'],
-                                                  lidar_std=self.config['Dataset']['transforms']['lidar_mean_waymo'])
-
-        elif self.config['Dataset']['name'] == 'iseauto':
-            cam_path = os.path.join(dataroot, self.list_examples_cam[idx])
-            anno_path = cam_path.replace('/rgb', '/annotation_gray')
-            lidar_path = cam_path.replace('/rgb', '/pkl').replace('.png', '.pkl')
-
-            rgb = Image.open(cam_path).resize((480, 320), Image.BILINEAR)
-            anno = Image.open(anno_path).resize((480, 320), Image.BILINEAR)
-            anno = torch.from_numpy(np.array(anno)).unsqueeze(0).long()
-            points_set, camera_coord = open_lidar(lidar_path, w_ratio=8.84, h_ratio=8.825,
-                                                  lidar_mean=self.config['Dataset']['transforms']['lidar_mean_iseauto'],
-                                                  lidar_std=self.config['Dataset']['transforms']['lidar_mean_iseauto'])
+                                                  lidar_mean=self.config['Dataset']['transforms']['lidar_mean_zod'],
+                                                  lidar_std=self.config['Dataset']['transforms']['lidar_std_zod'])
 
         else:
             sys.exit("['Dataset']['name'] must be specified waymo or iseauto")
