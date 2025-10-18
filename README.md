@@ -11,7 +11,6 @@ https://github.com/user-attachments/assets/cd51585e-2f66-4ff5-bb5b-689d3fb7d4c0
 
 
 # News
-- [02-01-2025] The training paths of CLFT and CLFCN are all available for downloading. Three paths for CLFCN corresponding to rgb, lidar, and cross-fusion modalities. Five paths for CLFT corresponding to base-fusion, large-fusion, hybrid-rgb, hybrid-lidar, and hybrid-fusion. All paths trained at TalTech HPC in the environment specified below. 
 - [30-09-2024] The train.py and test.py scripts are available. The models trained for paper's experiments are available for downloading. 
 - [25-09-2024] The author finally finished his PhD thesis work and start to maintain the repo. The visual_run.py script is available. The waymo dataset used for the experiments in paper is available for downloading. 
 - [16/04/2024] Please note that this repository is still under maintenance. Author is focusing on his PhD thesis at the moment and will clean up code and optimize README gradually. You can write to claude.gujunyi@gmail.com for details. 
@@ -52,11 +51,7 @@ We recommend to implement this environment if you are using our models.
 - [Dataset](waymo_dataset/README.md)
 
 ## Model
-For CLFT:
-- [CLFT Models](model_path/clft/README.md)
-
-For CLFCN:
-- [CLFCN Models](model_path/clfcn/README.md)
+- [Model](model_path/README.md)
 
 ## Visualization 
 We provide the [visual_run.py](https://github.com/Claud1234/CLFT/blob/079f003bd6d5f9a5fa0674add1ad5048fd9999b8/visual_run.py) to load the model path and input data, then render out the segmentation and overlay results as PNG images. 
@@ -77,9 +72,9 @@ python visual_run.py -m cross_fusion -bb clft -p ./waymo_dataset/visual_run_demo
 Specify the corresponding CLFT model path in the [config.json 'General' 'model_path'](https://github.com/Claud1234/CLFT/blob/079f003bd6d5f9a5fa0674add1ad5048fd9999b8/config.json#L13)
 
 
-### CLFCN
+### FCN
 ```
-python visual_run.py -m cross_fusion -bb clfcn -p ./waymo_dataset/visual_run_demo.txt
+python visual_run.py -m cross_fusion -bb clft -p ./waymo_dataset/visual_run_demo.txt
 ```
 Specify the corresponding CLFCN model path in the [config.json 'General' 'model_path'](https://github.com/Claud1234/CLFT/blob/079f003bd6d5f9a5fa0674add1ad5048fd9999b8/config.json#L13)
 
@@ -111,11 +106,9 @@ As indicated in paper, there are different CLFT variants CLFT-Base, CLFT-Large, 
 | CLFT-Hybird |         768         | 'vit_base_resnet50_384' |   [2, 5, 8, 11]   |
 |  CLFT-Large |        1024         | 'vit_large_patch16_384' |  [5, 11, 17, 23]  |
 
-### CLFCN
-```
-python train.py -m cross_fusion -bb clfcn 
-```
+### FCN
 
+TODO
 
 ## Testing
 The [test.py](https://github.com/Claud1234/CLFT/blob/079f003bd6d5f9a5fa0674add1ad5048fd9999b8/test.py) script is for testing the CLFT and CLFCN models. 
@@ -139,12 +132,8 @@ The input path txt files are available in [waymo_dataset/splits_clft](https://gi
 
 
 ### CLFCN
-```
-python test.py -bb clfcn -m cross_fusion -p ./waymo_dataset/splits_clft/test_day_fair.txt
-```
-Specify the corresponding CLFCN model path in the [config.json 'General''model_path'](https://github.com/Claud1234/CLFT/blob/079f003bd6d5f9a5fa0674add1ad5048fd9999b8/config.json#L13)
 
-The input path txt files are available in [waymo_dataset/splits_clft](https://github.com/Claud1234/CLFT/tree/079f003bd6d5f9a5fa0674add1ad5048fd9999b8/waymo_dataset/splits_clft), the rest 20% of dataset were used for test. Four weather subsets are classified in different text files. 
+TODO
 
 ## Bibtex
 If anything in this repo has a use for your work, please considering to cite our work. This is very helpful for the author who just finished his PhD and started to build his academic career. 

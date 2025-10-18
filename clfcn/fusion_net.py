@@ -39,12 +39,9 @@ class FusionNet(nn.Module):
             features_lidar = self.backbone_lidar(lidar)
             features_fusion = torch.cat((features_rgb, features_lidar), dim=1)
 
-            out_rgb = self.classifier_rgb(
-                self.intermediate_single_rgb(features_rgb))
-            out_lidar = self.classifier_lidar(
-                self.intermediate_single_lidar(features_lidar))
-            out_fusion = self.classifier_fusion(
-                self.intermediate_single_fusion(features_fusion))
+            out_rgb = self.classifier_rgb(self.intermediate_single_rgb(features_rgb))
+            out_lidar = self.classifier_lidar(self.intermediate_single_lidar(features_lidar))
+            out_fusion = self.classifier_fusion(self.intermediate_single_fusion(features_fusion))
 
             out_rgb = F.interpolate(out_rgb, size=(h, w), mode='bilinear', align_corners=False)
             out_lidar = F.interpolate(out_lidar, size=(h, w), mode='bilinear', align_corners=False)
@@ -57,8 +54,7 @@ class FusionNet(nn.Module):
 
         elif modal == 'rgb':
             features_rgb = self.backbone_rgb(rgb)
-            out_rgb = self.classifier_rgb(
-                self.intermediate_single_rgb(features_rgb))
+            out_rgb = self.classifier_rgb(self.intermediate_single_rgb(features_rgb))
             out_rgb = F.interpolate(out_rgb, size=(h, w), mode='bilinear', align_corners=False)
 
             out = {}
@@ -66,8 +62,7 @@ class FusionNet(nn.Module):
 
         elif modal == 'lidar':
             features_lidar = self.backbone_lidar(lidar)
-            out_lidar = self.classifier_lidar(
-                self.intermediate_single_lidar(features_lidar))
+            out_lidar = self.classifier_lidar(self.intermediate_single_lidar(features_lidar))
             out_lidar = F.interpolate(out_lidar, size=(h, w), mode='bilinear', align_corners=False)
 
             out = {}

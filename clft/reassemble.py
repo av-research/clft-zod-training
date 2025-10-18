@@ -4,7 +4,6 @@ import torch.nn as nn
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 
-
 class Read_ignore(nn.Module):
     def __init__(self, start_index=1):
         super(Read_ignore, self).__init__()
@@ -12,7 +11,6 @@ class Read_ignore(nn.Module):
 
     def forward(self, x):
         return x[:, self.start_index:]
-
 
 class Read_add(nn.Module):
     def __init__(self, start_index=1):
@@ -26,7 +24,6 @@ class Read_add(nn.Module):
             readout = x[:, 0]
         return x[:, self.start_index :] + readout.unsqueeze(1)
 
-
 class Read_projection(nn.Module):
     def __init__(self, in_features, start_index=1):
         super(Read_projection, self).__init__()
@@ -38,7 +35,6 @@ class Read_projection(nn.Module):
         features = torch.cat((x[:, self.start_index :], readout), -1)
         return self.project(features)
 
-
 class MyConvTranspose2d(nn.Module):
     def __init__(self, conv, output_size):
         super(MyConvTranspose2d, self).__init__()
@@ -48,7 +44,6 @@ class MyConvTranspose2d(nn.Module):
     def forward(self, x):
         x = self.conv(x, output_size=self.output_size)
         return x
-
 
 class Resample(nn.Module):
     def __init__(self, p, s, h, emb_dim, resample_dim):
@@ -82,7 +77,6 @@ class Resample(nn.Module):
         x = self.conv1(x)
         x = self.conv2(x)
         return x
-
 
 class Reassemble(nn.Module):
     def __init__(self, image_size, read, p, s, emb_dim, resample_dim):

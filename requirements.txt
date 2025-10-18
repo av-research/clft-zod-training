@@ -1,0 +1,8 @@
+numpy
+torch
+tqdm
+tensorboard
+torchvision
+timm
+einops
+opencv-python

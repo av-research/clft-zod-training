@@ -102,5 +102,4 @@ class CLFT(nn.Module):
                 self.activation[name] = output
             return hook
         for h in hooks:
-            #self.transformer_encoders.layers[h].register_forward_hook(get_activation('t'+str(h)))
             self.transformer_encoders.blocks[h].register_forward_hook(get_activation('t'+str(h)))

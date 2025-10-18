@@ -76,6 +76,49 @@ def find_overlap(n_classes, output, anno):
     return area_overlap, area_pred, area_label, area_union
 
 
+def zod_find_overlap_1(n_classes, output, anno):
+    '''
+    ZOD-specific IoU calculation optimized for sparse annotations.
+    Key differences from standard version:
+    - More lenient evaluation for sparse datasets
+    - Different handling of ignore regions
+    - Focus on rare classes (cyclists, pedestrians)
+    
+    Evaluates vehicle, sign, cyclist, pedestrian (classes 2-5).
+    :param n_classes: Number of classes (6)
+    :param output: 'fusion' output batch
+    :param anno: annotation batch
+    :return: histogram statistic of overlap, prediction and annotation, union
+    '''
+    # ZOD mapping: 0->background, 1->ignore, 2->vehicle, 3->sign, 4->cyclist, 5->pedestrian
+    
+    _, pred_indices = torch.max(output, dim=1)
+
+    # ZOD-specific: For sparse datasets, be more careful with ignore handling
+    # If annotation is ignore (1), force prediction to background (0) for IoU
+    pred_indices[anno == 1] = 0
+
+    # ZOD-specific: For very sparse annotations, we might want to consider
+    # predictions that are "close" to correct (e.g., predicting vehicle instead of cyclist)
+    # But for now, keep strict evaluation
+    overlap = pred_indices * (pred_indices == anno).long()
+
+    # Calculate metrics for classes 2 to n_classes-1 (excluding background 0 and ignore 1)
+    # For n_classes=6: evaluates classes 2-5 (vehicle, sign, cyclist, pedestrian)
+    num_eval_classes = n_classes - 2
+    area_overlap = torch.histc(overlap.float(), bins=num_eval_classes, max=num_eval_classes + 2, min=2)
+    area_pred = torch.histc(pred_indices.float(), bins=num_eval_classes, max=num_eval_classes + 2, min=2)
+    area_label = torch.histc(anno.float(), bins=num_eval_classes, max=num_eval_classes + 2, min=2)
+    area_union = area_pred + area_label - area_overlap
+
+    # ZOD-specific: Add small epsilon to avoid division by zero in sparse cases
+    area_union = torch.clamp(area_union, min=1e-6)
+
+    assert (area_overlap <= area_label + 1e-6).all(), "Intersection area should be smaller than Union area"
+
+    return area_overlap, area_pred, area_label, area_union
+
+
 def find_overlap_1(n_classes, output, anno):
     '''
     This is the function for the conference summary paper, ignore the car, consider pedestrian, cyclist and sign.
@@ -122,7 +165,6 @@ def find_overlap_1(n_classes, output, anno):
     assert (area_overlap <= area_label).all(), "Intersection area should be smaller than Union area"
 
     return area_overlap, area_pred, area_label, area_union
-
 
 def auc_ap(precision, recall):
     '''
