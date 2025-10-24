@@ -19,12 +19,45 @@ import torch
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 
-from utils.helpers import waymo_anno_class_relabel
+from utils.helpers import zod_anno_class_relabel
 from utils.helpers import waymo_anno_class_relabel_1
 from utils.lidar_process import open_lidar
 from utils.lidar_process import crop_pointcloud
 from utils.lidar_process import get_unresized_lid_img_val
 from utils.data_augment import DataAugment
+
+
+def get_splitted_dataset(config, split, data_category, paths_rgb):
+    list_files = [os.path.basename(im) for im in paths_rgb]
+    np.random.seed(config['General']['seed'])
+    np.random.shuffle(list_files)
+    if split == 'train':
+        selected_files = list_files[:int(len(list_files)*\
+                                config['Dataset']['splits']['split_train'])]
+#        print(selected_files)
+    elif split == 'val':
+        selected_files = list_files[
+            int(len(list_files)*config['Dataset']['splits']['split_train']):
+            int(len(list_files)*config['Dataset']['splits']['split_train']) +
+            int(len(list_files)*config['Dataset']['splits']['split_val'])]
+    else:
+        selected_files = list_files[
+            int(len(list_files)*config['Dataset']['splits']['split_train']) +
+            int(len(list_files)*config['Dataset']['splits']['split_val']):]
+
+    paths_rgb = [os.path.join(config['Dataset']['paths']['path_dataset'],
+                              data_category,
+                              config['Dataset']['paths']['path_rgb'],
+                              im[:-4]+'.png') for im in selected_files]
+    paths_lidar = [os.path.join(config['Dataset']['paths']['path_dataset'],
+                                data_category,
+                                config['Dataset']['paths']['path_lidar'],
+                                im[:-4]+'.pkl') for im in selected_files]
+    paths_anno = [os.path.join(config['Dataset']['paths']['path_dataset'],
+                               data_category,
+                               config['Dataset']['paths']['path_anno'],
+                               im[:-4]+'.png') for im in selected_files]
+    return paths_rgb, paths_lidar, paths_anno
 
 
 def lidar_dilation(X, Y, Z):
@@ -66,7 +99,7 @@ class Dataset(object):
                                                 transforms.ToTensor(),
                                                 transforms.Normalize(
                                                 mean=config['Dataset']['transforms']['image_mean'],
-                                                std=config['Dataset']['transforms']['image_mean'])])
+                                                std=config['Dataset']['transforms']['image_std'])])
 
         self.anno_resize = transforms.Resize((self.img_size, self.img_size),
                                              interpolation=transforms.InterpolationMode.NEAREST)
@@ -77,7 +110,7 @@ class Dataset(object):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        dataroot = './waymo_dataset/'
+        dataroot = self.config['Dataset']['dataset_root']
 
         if self.config['Dataset']['name'] == 'waymo':
             cam_path = os.path.join(dataroot, self.list_examples_cam[idx])
@@ -88,10 +121,24 @@ class Dataset(object):
             rgb = Image.open(cam_path).convert('RGB')
 
             # Here there are two class relabel functions, go to /utils/helper.py for details.
-            anno = waymo_anno_class_relabel(Image.open(anno_path))  # Tensor [1, H, W]
+            anno = waymo_anno_class_relabel_1(Image.open(anno_path))  # Tensor [1, H, W]
             points_set, camera_coord = open_lidar(lidar_path, w_ratio=4, h_ratio=4,
                                                   lidar_mean=self.config['Dataset']['transforms']['lidar_mean_waymo'],
                                                   lidar_std=self.config['Dataset']['transforms']['lidar_mean_waymo'])
+
+        elif self.config['Dataset']['name'] == 'zod':
+            cam_path = os.path.join(dataroot, self.list_examples_cam[idx])
+            anno_path = cam_path.replace('/camera', '/annotation')
+            lidar_path = cam_path.replace('/camera', '/lidar').replace('.png', '.pkl')
+
+            # waymo rgb and anno is in 480x320, lidar is in 1920x1280
+            rgb = Image.open(cam_path).convert('RGB')
+
+            # Here there are two class relabel functions, go to /utils/helper.py for details.
+            anno = zod_anno_class_relabel(Image.open(anno_path))  # Tensor [1, H, W]
+            points_set, camera_coord = open_lidar(lidar_path, w_ratio=4, h_ratio=4,
+                                                lidar_mean=self.config['Dataset']['transforms']['lidar_mean'],
+                                                lidar_std=self.config['Dataset']['transforms']['lidar_std'])
 
         elif self.config['Dataset']['name'] == 'iseauto':
             cam_path = os.path.join(dataroot, self.list_examples_cam[idx])
@@ -106,7 +153,7 @@ class Dataset(object):
                                                   lidar_std=self.config['Dataset']['transforms']['lidar_mean_iseauto'])
 
         else:
-            sys.exit("['Dataset']['name'] must be specified waymo or iseauto")
+            sys.exit("['Dataset']['name'] must be specified waymo, zod, or iseauto")
 
         rgb_name = cam_path.split('/')[-1].split('.')[0]
         anno_name = anno_path.split('/')[-1].split('.')[0]
@@ -117,6 +164,10 @@ class Dataset(object):
         # Crop the top part 1/2 of the input data
         rgb_orig = rgb.copy()
         w_orig, h_orig = rgb.size  # PIL tuple. (w, h)
+        #if self.config['Dataset']['name'] == 'zod':
+        #    # For ZOD, don't crop to keep all annotations
+        #    delta = 0
+        #else:
         delta = int(h_orig/2)
         top_crop_rgb = TF.crop(rgb, delta, 0, h_orig-delta, w_orig)  # w,h
         top_crop_anno = TF.crop(anno, delta, 0, h_orig-delta, w_orig)
@@ -158,7 +209,13 @@ class Dataset(object):
 
         lid_images = torch.cat((X, Y, Z), 0)
 
+        # Pad camera_coord to fixed length for batching
+        max_len = 300000
+        padded_coord = torch.full((max_len, 2), -1, dtype=torch.float)
+        actual_len = len(camera_coord)
+        padded_coord[:actual_len] = torch.tensor(camera_coord, dtype=torch.float)
+
         return {'rgb': rgb, 'rgb_orig': rgb_orig,
-                'lidar': lid_images, 'anno': anno}
+                'lidar': lid_images, 'anno': anno, 'camera_coord': padded_coord}
 
 

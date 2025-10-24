@@ -1,0 +1,17 @@
+conda activate conda_py39
+chmod +x train.sh
+sbatch -J train-1 train.slurm ./config/zod_hpc/config_1.json
+watch -n1 squeue -u totahv
+
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+ssh totahv@base.hpc.taltech.ee
+cd /gpfs/mariana/smbhome/totahv/clft-zod-training
+
+sbatch -J train-1 train.slurm ./config/config_1.json
+watch -n1 squeue -u totahv
+rsync -avz /media/tom/ml/projects/clft-zod-training/zod_dataset totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/clft-zod-training
+
+rsync -avz totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/zod_logs/config_1 /media/tom/ml/zod_logs/

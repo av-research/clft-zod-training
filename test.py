@@ -1,44 +1,46 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import sys
 import json
-import argparse
 import numpy as np
+import argparse
+
 from torch.utils.data import DataLoader
 
 from tools.tester import Tester
 from tools.dataset import Dataset
 
+parser = argparse.ArgumentParser(description='CLFT and CLFCN Testing')
+parser.add_argument('-c', '--config', type=str, required=False, default='config.json', help='The path of the config file')
+args = parser.parse_args()
+config_file = args.config
 
-with open('config.json', 'r') as f:
+with open(config_file, 'r') as f:
     config = json.load(f)
 
-parser = argparse.ArgumentParser(description='CLFT and CLFCN Tresting')
-parser.add_argument('-bb', '--backbone', required=True,
-                    choices=['clfcn', 'clft'],
-                    help='Use the backbone of training, clft or clfcn')
-parser.add_argument('-m', '--mode', type=str, required=True,
-                    choices=['rgb', 'lidar', 'cross_fusion'],
-                    help='Output mode (lidar, rgb or cross_fusion)')
-parser.add_argument('-p', '--path', type=str, required=True,
-                    help='The path of the text file to test the model')
-args = parser.parse_args()
 np.random.seed(config['General']['seed'])
-tester = Tester(config, args)
+tester = Tester(config)
 
-test_data = Dataset(config, 'test', args.path)
-print(f'Testing with the path {args.path}')
-test_dataloader = DataLoader(test_data,
-                             batch_size=config['General']['batch_size'],
-                             shuffle=False,
-                             pin_memory=True,
-                             drop_last=True)
+test_data_path = config['CLI']['path']
+test_data_files = [
+    'test_day_fair.txt',
+    'test_night_fair.txt',
+    'test_day_rain.txt',
+    'test_night_rain.txt'
+]
 
-if args.backbone == 'clft':
-    tester.test_clft(test_dataloader, args.mode)
+for file in test_data_files:
+    path = test_data_path + file
+    print(f"Testing with the path {path}")
 
-elif args.backbone == 'clfcn':
-    tester.test_clfcn(test_dataloader, args.mode)
+    test_data = Dataset(config, 'test', path)
 
-else:
-    sys.exit("A backbone must be specified! (clft or clfcn)")
+    test_dataloader = DataLoader(test_data,
+                                batch_size=config['General']['batch_size'],
+                                shuffle=False,
+                                pin_memory=True,
+                                drop_last=True)
+
+    result_file = config['Log']['logdir'] + 'result_' + file
+    tester.test_clft(test_dataloader, config['CLI']['mode'], result_file)
+    print('Testing is completed')

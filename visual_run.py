@@ -17,13 +17,13 @@ import torch
 import argparse
 import numpy as np
 from PIL import Image
-import torchvision.transforms.v2 as transforms
-import torchvision.transforms.v2.functional as TF
+import torchvision.transforms as transforms
+import torchvision.transforms.functional as TF
 
 import json
 from clft.clft import CLFT
 from clfcn.fusion_net import FusionNet
-from utils.helpers import waymo_anno_class_relabel
+from utils.helpers import waymo_anno_class_relabel_1
 from utils.lidar_process import open_lidar
 from utils.lidar_process import crop_pointcloud
 from utils.lidar_process import get_unresized_lid_img_val
@@ -70,7 +70,7 @@ class OpenInput(object):
         clft_anno_resize = transforms.Resize((384, 384), interpolation=transforms.InterpolationMode.NEAREST)
         anno = Image.open(anno_path)
 
-        anno = waymo_anno_class_relabel(anno)
+        anno = waymo_anno_class_relabel_1(anno)
         # annotation = Image.open(
         #       '/home/claude/Data/claude_iseauto/labeled/night_fair/annotation_rgb/sq14_000061.png').\
         #          resize((480, 320), Image.BICUBIC).convert('F')
@@ -107,6 +107,31 @@ class OpenInput(object):
 
         lid_images = torch.cat((X, Y, Z), 0)
         return lid_images
+
+
+def get_model_second_input(rgb_tensor, lidar_tensor, modality):
+    """
+    Get the correct second input (rgb or lidar) based on modality.
+    
+    Modality modes:
+    - 'rgb': Use RGB for both inputs (RGB-only mode)
+    - 'lidar': Use LiDAR as second input (LiDAR-only mode)  
+    - 'cross_fusion': Use LiDAR as second input (cross-modal fusion)
+    
+    Args:
+        rgb_tensor: RGB image tensor
+        lidar_tensor: LiDAR image tensor
+        modality: String specifying the modality mode
+        
+    Returns:
+        Tensor to use as second input to the model
+    """
+    if modality == 'rgb':
+        # RGB-only mode: use RGB for both inputs
+        return rgb_tensor
+    else:
+        # LiDAR or cross_fusion modes: use LiDAR as second input
+        return lidar_tensor
 
 
 def run(modality, backbone, config):
@@ -178,7 +203,8 @@ def run(modality, backbone, config):
 
         if backbone == 'clft':
             with torch.no_grad():
-                _, output_seg = model(rgb, lidar, modality)
+                second_input = get_model_second_input(rgb, lidar, modality)
+                _, output_seg = model(rgb, second_input, modality)
                 segmented_image = draw_test_segmentation_map(output_seg)
                 seg_resize = cv2.resize(segmented_image, (480, 160))
 
@@ -197,7 +223,8 @@ def run(modality, backbone, config):
 
         elif backbone == 'clfcn':
             with torch.no_grad():
-                output_seg = model(rgb, lidar, modality)
+                second_input = get_model_second_input(rgb, lidar, modality)
+                output_seg = model(rgb, second_input, modality)
                 output_seg = output_seg[modality]
                 segmented_image = draw_test_segmentation_map(output_seg)
 
@@ -228,9 +255,17 @@ if __name__ == '__main__':
                         help='Use the backbone of training, clft or clfcn')
     parser.add_argument('-p', '--path', type=str, required=True,
                         help='The path of the text file to visualize')
+    parser.add_argument('-c', '--config', type=str, default='config.json',
+                        help='Path to config file (default: config.json)')
+    parser.add_argument('--model_path', type=str,
+                        help='Path to model checkpoint (overrides config)')
     args = parser.parse_args()
 
-    with open('config.json', 'r') as f:
+    with open(args.config, 'r') as f:
         configs = json.load(f)
+
+    # Override model path if provided
+    if args.model_path:
+        configs['General']['model_path'] = args.model_path
 
     run(args.mode, args.backbone, configs)
