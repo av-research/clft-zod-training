@@ -6,3 +6,4 @@ torchvision
 timm
 einops
 opencv-python
+requests

@@ -2,6 +2,27 @@ import json
 import uuid
 from pathlib import Path
 from datetime import datetime
+import math
+
+
+def clean_nan_values(obj):
+    """
+    Recursively replace NaN values with empty strings in nested dictionaries/lists.
+
+    Args:
+        obj: The object to clean (dict, list, or primitive)
+
+    Returns:
+        The cleaned object with NaN values replaced
+    """
+    if isinstance(obj, dict):
+        return {key: clean_nan_values(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_nan_values(item) for item in obj]
+    elif isinstance(obj, float) and math.isnan(obj):
+        return 0.0
+    else:
+        return obj
 
 
 def log_epoch_results(epoch, training_uuid, results, log_dir, learning_rate=None, epoch_time=None):
@@ -34,6 +55,9 @@ def log_epoch_results(epoch, training_uuid, results, log_dir, learning_rate=None
         data["learning_rate"] = learning_rate
     if epoch_time is not None:
         data["epoch_time"] = epoch_time
+
+    # Clean NaN values from the data before writing
+    data = clean_nan_values(data)
 
     log_dir = Path(log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)

@@ -8,7 +8,7 @@
     "General":{
         "device":"cuda:0",
         "epochs":400,
-        "batch_size":12,
+        "batch_size":8,
         "path_predicted_images":"output",
         "seed":0,
         "resume_training":true,
@@ -41,7 +41,7 @@
         "name": "zod",
         "dataset_root": "./zod_dataset",
         "train_split": "./zod_dataset/train.txt",
-        "val_split": "./zod_dataset/early_stop_valid.txt",
+        "val_split": "./zod_dataset/validation.txt",
         "splits":{
             "split_train":0.6,
             "split_val":0.2,
@@ -53,10 +53,10 @@
             "p_flip":0.5,
             "p_crop":0.3,
             "p_rot":0.4,
-            "image_mean":[0.485, 0.456, 0.406],
-            "image_std":[0.229, 0.224, 0.225],
-            "lidar_mean":[-1.451, -0.223, 28.162],
-            "lidar_std":[22.747, 2.91, 28.581],
+            "image_mean":[0.325291, 0.325736, 0.331795],
+            "image_std":[0.168061, 0.179542, 0.204609],
+            "lidar_mean":[0.049261, 0.049575, 0.092697],
+            "lidar_std":[0.07696, 0.073541, 0.098311],
             "lidar_mean_waymo":[-0.17263354, 0.85321806, 24.5527253],
             "lidar_std_waymo":[7.34546552, 1.17227659, 15.83745082],
             "lidar_mean_iseauto":[-0.079, 0.033, 15.90],
@@ -68,11 +68,11 @@
                 "color": 0
             },
             "1": {
-                "name": "cyclist",
+                "name": "ignore",
                 "color": 1
             },
             "2": {
-                "name": "pedestrian",
+                "name": "vehicle",
                 "color": 2
             },
             "3": {
@@ -80,9 +80,14 @@
                 "color": 3
             },
             "4": {
-                "name": "ignore",
+                "name": "cyclist",
                 "color": 4
+            },
+            "5": {
+                "name": "pedestrian",
+                "color": 5
             }
-        }
+        },
+        "class_weights": [0.1, 0.0, 2.5, 20.0, 15.0, 18.0]
     }
 }

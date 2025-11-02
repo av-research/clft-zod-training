@@ -42,6 +42,9 @@
     },
     "Dataset":{
         "name": "waymo",
+        "dataset_root": "./waymo_dataset",
+        "train_split": "./waymo_dataset/train.txt",
+        "val_split": "./waymo_dataset/validation.txt",
         "splits":{
             "split_train":0.6,
             "split_val":0.2,

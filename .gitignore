@@ -24,3 +24,8 @@ ipython/test_img
 *.pkl
 ipython/*.png
 test_images/*
+zod_dataset/annotation
+zod_dataset/annotation_lidar
+zod_dataset/lidar_png
+zod_dataset/camera
+zod_dataset/annotation_balanced

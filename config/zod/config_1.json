@@ -12,11 +12,11 @@
         "path_predicted_images":"output",
         "seed":0,
         "resume_training":false,
-        "resume_training_model_path": "./logs/zod/config_1/progress_save/checkpoint_2.pth",
+        "resume_training_model_path": "",
 	    "reset_lr":false,
         "early_stop_patience": 200,
         "save_epoch": 5,
-        "model_path": "/media/tom/ml/zod_logs/config_1/progress_save/checkpoint_149.pth"
+        "model_path": ""
     },
     "Log": {
         "logdir": "./logs/zod/config_1/"
@@ -54,10 +54,10 @@
             "p_flip":0.5,
             "p_crop":0.3,
             "p_rot":0.4,
-            "image_mean":[0.3516, 0.3678, 0.3937],
-            "image_std":[0.1701, 0.181, 0.2074],
-            "lidar_mean":[-1.451, -0.223, 28.162],
-            "lidar_std":[22.747, 2.91, 28.581],
+            "image_mean":[0.325291, 0.325736, 0.331795],
+            "image_std":[0.168061, 0.179542, 0.204609],
+            "lidar_mean":[0.049261, 0.049575, 0.092697],
+            "lidar_std":[0.07696, 0.073541, 0.098311],
             "lidar_mean_waymo":[-0.17263354, 0.85321806, 24.5527253],
             "lidar_std_waymo":[7.34546552, 1.17227659, 15.83745082],
             "lidar_mean_iseauto":[-0.079, 0.033, 15.90],
@@ -89,6 +89,6 @@
                 "color": 5
             }
         },
-        "class_weights": [1.0, 0.0, 20.0, 500.0, 68.0, 180.0]
+        "class_weights": [0.1, 0.0, 2.5, 20.0, 15.0, 18.0]
     }
 }

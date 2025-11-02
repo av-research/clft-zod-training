@@ -10,12 +10,13 @@ from torch.utils.tensorboard import SummaryWriter
 import time
 
 from clfcn.fusion_net import FusionNet
-from utils.metrics import find_overlap_1, zod_find_overlap_1, zod_point_overlap
+from utils.metrics import find_overlap_1, zod_find_overlap_1
 from clft.clft import CLFT
 from utils.helpers import EarlyStopping, get_model_path
 from utils.helpers import save_model_dict
 from utils.helpers import adjust_learning_rate
 from integrations.training_logger import log_epoch_results
+from integrations.vision_service import create_training, send_epoch_results
 
 writer = SummaryWriter()
 
@@ -29,6 +30,26 @@ class Trainer(object):
         self.device = torch.device(self.config['General']['device']
                                    if torch.cuda.is_available() else "cpu")
         print("device: %s" % self.device)
+
+        # Create training in vision service
+        self.vision_training_id = None
+        if self.training_uuid:
+            training_name = f"{config['Dataset']['name']} - {config['CLI']['backbone']}"
+            model_name = config['CLI']['backbone']
+            dataset_name = config['Dataset']['name']
+            description = f"Training {model_name} on {dataset_name} dataset"
+            
+            self.vision_training_id = create_training(
+                uuid=self.training_uuid,
+                name=training_name,
+                model=model_name,
+                dataset=dataset_name,
+                description=description
+            )
+            if self.vision_training_id:
+                print(f"Created training in vision service: {self.vision_training_id}")
+            else:
+                print("Failed to create training in vision service")
 
         if config['CLI']['backbone'] == 'clfcn':
             self.model = FusionNet()
@@ -108,6 +129,81 @@ class Trainer(object):
         else:
             print('Training from the beginning')
 
+    def compute_epoch_metrics(self, total_loss, num_batches):
+        """
+        Compute final metrics for an epoch.
+
+        Args:
+            total_loss: Sum of losses across all batches
+            num_batches: Number of batches processed
+            modal: Training mode
+            dataloader: DataLoader
+
+        Returns:
+            dict: Dictionary containing all computed metrics
+        """
+        # Primary IoU
+        epoch_IoU = self.overlap_cum / self.union_cum
+
+        # Additional primary metrics
+        precision = self.overlap_cum / (self.pred_cum + 1e-6)
+        recall = self.overlap_cum / (self.label_cum + 1e-6)
+        f1 = 2 * precision * recall / (precision + recall + 1e-6)
+
+        # Average loss
+        epoch_loss = total_loss / num_batches
+
+        metrics = {
+            'epoch_IoU': epoch_IoU,
+            'precision': precision,
+            'recall': recall,
+            'f1': f1,
+            'epoch_loss': epoch_loss,
+            'mean_iou': torch.mean(epoch_IoU).item()
+        }
+
+        return metrics
+
+    def prepare_results_dict(self, train_metrics, val_metrics):
+        """
+        Prepare results dictionary for logging.
+
+        Args:
+            train_metrics: Training metrics dictionary
+            val_metrics: Validation metrics dictionary
+            modal: Training mode
+            dataloader: DataLoader (not used for ZOD)
+
+        Returns:
+            dict: Results dictionary for logging
+        """
+        results = {
+            "train": {},
+            "val": {}
+        }
+
+        # Add primary metrics
+        for i, cls in enumerate(self.eval_classes):
+            results["train"][cls] = {
+                "iou": train_metrics["epoch_IoU"][i].item(),
+                "precision": train_metrics["precision"][i].item(),
+                "recall": train_metrics["recall"][i].item(),
+                "f1": train_metrics["f1"][i].item()
+            }
+            results["val"][cls] = {
+                "iou": val_metrics["epoch_IoU"][i].item(),
+                "precision": val_metrics["precision"][i].item(),
+                "recall": val_metrics["recall"][i].item(),
+                "f1": val_metrics["f1"][i].item()
+            }
+
+        results["train"]["loss"] = train_metrics["epoch_loss"]
+        results["train"]["mean_iou"] = train_metrics["mean_iou"]
+        results["val"]["loss"] = val_metrics["epoch_loss"]
+        results["val"]["mean_iou"] = val_metrics["mean_iou"]
+
+        return results
+
     def train_clft(self, train_dataloader, valid_dataloader, modal):
         """
         The training of one epoch
@@ -121,130 +217,96 @@ class Trainer(object):
             lr = adjust_learning_rate(self.config, self.optimizer_clft, epoch)
             print('Epoch: {:.0f}, LR: {:.6f}'.format(epoch, lr))
             print('Training...')
+
+            # Initialize metric accumulators
+            self.overlap_cum = torch.zeros(self.nclasses - 2).to(self.device)
+            self.pred_cum = torch.zeros(self.nclasses - 2).to(self.device)
+            self.label_cum = torch.zeros(self.nclasses - 2).to(self.device)
+            self.union_cum = torch.zeros(self.nclasses - 2).to(self.device)
             train_loss = 0.0
-            overlap_cum, pred_cum, label_cum, union_cum = 0, 0, 0, 0
-            if modality in ['lidar', 'cross_fusion']:
-                self.cross_fusion_2d_cum_train = {'overlap': 0, 'pred': 0, 'label': 0, 'union': 0}
+
             progress_bar = tqdm(train_dataloader)
             for i, batch in enumerate(progress_bar):
                 batch['rgb'] = batch['rgb'].to(self.device, non_blocking=True)
                 batch['lidar'] = batch['lidar'].to(self.device, non_blocking=True)
-                batch['anno'] = batch['anno'].to(self.device, non_blocking=True) # ?
+                batch['anno'] = batch['anno'].to(self.device, non_blocking=True)
 
                 self.optimizer_clft.zero_grad()
 
-                # If running RGB-only, feed rgb into both rgb and lidar inputs
-                lidar_input = batch['rgb'] if self.rgb_only else batch['lidar']
-                _, output_seg = self.model(batch['rgb'], lidar_input, modality)
+                # Prepare model inputs based on training mode
+                if self.rgb_only or modality == 'rgb':
+                    # RGB-only mode: use RGB data for both inputs
+                    rgb_input = batch['rgb']
+                    lidar_input = batch['rgb']
+                elif modality == 'lidar':
+                    # LiDAR-only mode: use LiDAR data for both inputs
+                    rgb_input = batch['lidar']
+                    lidar_input = batch['lidar']
+                else:
+                    # Cross-fusion mode: use RGB and LiDAR data
+                    rgb_input = batch['rgb']
+                    lidar_input = batch['lidar']
+
+                # Forward pass through model
+                _, output_seg = self.model(rgb_input, lidar_input, modality)
 
                 # 1xHxW -> HxW
                 output_seg = output_seg.squeeze(1)
-
                 anno = batch['anno']
 
-                if modal in ['lidar', 'cross_fusion'] and 'camera_coord' in batch:
-                    # Use point-based IoU for LIDAR-based modalities
-                    batch_overlap, batch_pred, batch_label, batch_union = zod_point_overlap(self.nclasses, output_seg, anno, batch['camera_coord'])
-                else:
-                    batch_overlap, batch_pred, batch_label, batch_union = self.find_overlap_func(self.nclasses, output_seg, anno)
+                # Calculate metrics for this batch
+                batch_overlap, batch_pred, batch_label, batch_union = self.find_overlap_func(self.nclasses, output_seg, anno)
 
-                # For cross_fusion and lidar, also compute 2D IoU for comparison
-                if modal in ['lidar', 'cross_fusion']:
-                    batch_overlap_2d, batch_pred_2d, batch_label_2d, batch_union_2d = self.find_overlap_func(self.nclasses, output_seg, anno)
-                    self.cross_fusion_2d_cum_train['overlap'] += batch_overlap_2d
-                    self.cross_fusion_2d_cum_train['pred'] += batch_pred_2d
-                    self.cross_fusion_2d_cum_train['label'] += batch_label_2d
-                    self.cross_fusion_2d_cum_train['union'] += batch_union_2d
-
-                overlap_cum += batch_overlap
-                pred_cum += batch_pred
-                label_cum += batch_label
-                union_cum += batch_union
+                # Accumulate metrics
+                self.overlap_cum += batch_overlap
+                self.pred_cum += batch_pred
+                self.label_cum += batch_label
+                self.union_cum += batch_union
 
                 loss = self.criterion(output_seg, batch['anno'])
-
                 train_loss += loss.item()
                 loss.backward()
                 self.optimizer_clft.step()
                 progress_bar.set_description(f'CLFT train loss:{loss:.4f}')
 
-            # The IoU of one epoch
-            train_epoch_IoU = overlap_cum / union_cum
+            # Compute epoch metrics
+            train_metrics = self.compute_epoch_metrics(train_loss, len(train_dataloader))
+
+            # Print training metrics
+            print(f'Training Mean IoU for Epoch: {train_metrics["mean_iou"]:.4f}')
             for i, cls in enumerate(self.eval_classes):
-                print(f'Training {cls} IoU for Epoch: {train_epoch_IoU[i]:.4f}')
-            # The loss_rgb of one epoch
-            train_epoch_loss = train_loss / (i + 1)
-            print(f'Average Training Loss for Epoch: {train_epoch_loss:.4f}')
+                print(f'Training {cls} IoU for Epoch: {train_metrics["epoch_IoU"][i]:.4f}')
+            print(f'Average Training Loss for Epoch: {train_metrics["epoch_loss"]:.4f}')
 
-            # For cross_fusion and lidar, also print 2D IoU
-            if modality in ['lidar', 'cross_fusion']:
-                train_epoch_IoU_2d = self.cross_fusion_2d_cum_train['overlap'] / self.cross_fusion_2d_cum_train['union']
-                for i, cls in enumerate(self.eval_classes):
-                    print(f'Training 2D {cls} IoU for Epoch: {train_epoch_IoU_2d[i]:.4f}')
-
-            valid_epoch_loss, valid_epoch_IoU, valid_precision, valid_recall, valid_f1 = self.validate_clft(valid_dataloader, modality)
+            # Validate
+            val_metrics = self.validate_clft(valid_dataloader, modality)
 
             epoch_time = time.time() - epoch_start_time
 
-            # Compute additional metrics for training
-            train_precision = overlap_cum / (pred_cum + 1e-6)
-            train_recall = overlap_cum / (label_cum + 1e-6)
-            train_f1 = 2 * train_precision * train_recall / (train_precision + train_recall + 1e-6)
-            train_mean_iou = torch.mean(train_epoch_IoU).item()
-
-            # Plot the train and validation loss in Tensorboard
-            writer.add_scalars('Loss', {'train': train_epoch_loss, 'valid': valid_epoch_loss}, epoch)
-            # Plot the train and validation IoU in Tensorboard
+            # Tensorboard logging
+            writer.add_scalars('Loss', {'train': train_metrics['epoch_loss'], 'valid': val_metrics['epoch_loss']}, epoch)
             for i, cls in enumerate(self.eval_classes):
-                writer.add_scalars(f'{cls}_IoU', {'train': train_epoch_IoU[i], 'valid': valid_epoch_IoU[i]}, epoch)
+                writer.add_scalars(f'{cls}_IoU', {'train': train_metrics['epoch_IoU'][i], 'valid': val_metrics['epoch_IoU'][i]}, epoch)
             writer.close()
 
+            # Detailed logging
             if self.training_uuid and self.log_dir:
-                results = {
-                    "train": {},
-                    "val": {}
-                }
-                for i, cls in enumerate(self.eval_classes):
-                    results["train"][cls] = {
-                        "iou": train_epoch_IoU[i].item(),
-                        "precision": train_precision[i].item(),
-                        "recall": train_recall[i].item(),
-                        "f1": train_f1[i].item()
-                    }
-                    results["val"][cls] = {
-                        "iou": valid_epoch_IoU[i].item(),
-                        "precision": valid_precision[i].item(),
-                        "recall": valid_recall[i].item(),
-                        "f1": valid_f1[i].item()
-                    }
-                results["train"]["loss"] = train_epoch_loss
-                results["train"]["mean_iou"] = train_mean_iou
-                results["val"]["loss"] = valid_epoch_loss
-                results["val"]["mean_iou"] = torch.mean(valid_epoch_IoU).item()
-                # Add 2D metrics for cross_fusion and lidar
-                if modality in ['lidar', 'cross_fusion']:
-                    train_epoch_IoU_2d = self.cross_fusion_2d_cum_train['overlap'] / self.cross_fusion_2d_cum_train['union']
-                    valid_epoch_IoU_2d = self.cross_fusion_2d_cum['overlap'] / self.cross_fusion_2d_cum['union']
-                    for i, cls in enumerate(self.eval_classes):
-                        results["train"][f"{cls}_2d"] = {"iou": train_epoch_IoU_2d[i].item()}
-                        results["val"][f"{cls}_2d"] = {"iou": valid_epoch_IoU_2d[i].item()}
-                    # Add precision/recall/F1 for point-based
-                    train_precision_2d = self.cross_fusion_2d_cum_train['overlap'] / (self.cross_fusion_2d_cum_train['pred'] + 1e-6)
-                    train_recall_2d = self.cross_fusion_2d_cum_train['overlap'] / (self.cross_fusion_2d_cum_train['label'] + 1e-6)
-                    train_f1_2d = 2 * train_precision_2d * train_recall_2d / (train_precision_2d + train_recall_2d + 1e-6)
-                    valid_precision_2d = self.cross_fusion_2d_cum['overlap'] / (self.cross_fusion_2d_cum['pred'] + 1e-6)
-                    valid_recall_2d = self.cross_fusion_2d_cum['overlap'] / (self.cross_fusion_2d_cum['label'] + 1e-6)
-                    valid_f1_2d = 2 * valid_precision_2d * valid_recall_2d / (valid_precision_2d + valid_recall_2d + 1e-6)
-                    for i, cls in enumerate(self.eval_classes):
-                        results["train"][f"{cls}_2d"]["precision"] = train_precision_2d[i].item()
-                        results["train"][f"{cls}_2d"]["recall"] = train_recall_2d[i].item()
-                        results["train"][f"{cls}_2d"]["f1"] = train_f1_2d[i].item()
-                        results["val"][f"{cls}_2d"]["precision"] = valid_precision_2d[i].item()
-                        results["val"][f"{cls}_2d"]["recall"] = valid_recall_2d[i].item()
-                        results["val"][f"{cls}_2d"]["f1"] = valid_f1_2d[i].item()
+                results = self.prepare_results_dict(train_metrics, val_metrics)
                 log_epoch_results(epoch, self.training_uuid, results, self.log_dir, learning_rate=lr, epoch_time=epoch_time)
 
-            early_stop_index = round(valid_epoch_loss, 4)
+            # Send epoch results to vision service
+            if self.vision_training_id:
+                results = self.prepare_results_dict(train_metrics, val_metrics)
+                # Add learning rate and epoch time to results
+                results["learning_rate"] = lr
+                results["epoch_time"] = epoch_time
+                success = send_epoch_results(self.vision_training_id, epoch, results)
+                if success:
+                    print(f"Sent epoch {epoch} results to vision service")
+                else:
+                    print(f"Failed to send epoch {epoch} results to vision service")
+
+            early_stop_index = round(val_metrics['epoch_loss'], 4)
             early_stopping(early_stop_index, epoch, self.model, self.optimizer_clft)
             if ((epoch + 1) % self.config['General']['save_epoch'] == 0 and epoch > 0):
                 print('Saving model for every N epochs...')
@@ -261,9 +323,13 @@ class Trainer(object):
         self.model.eval()
         print('Validating...')
         valid_loss = 0.0
-        overlap_cum, pred_cum, label_cum, union_cum = 0, 0, 0, 0
-        if modal in ['lidar', 'cross_fusion']:
-            self.cross_fusion_2d_cum = {'overlap': 0, 'pred': 0, 'label': 0, 'union': 0}
+        
+        # Initialize metric accumulators as tensors (same as training)
+        overlap_cum = torch.zeros(self.nclasses - 2).to(self.device)
+        pred_cum = torch.zeros(self.nclasses - 2).to(self.device)
+        label_cum = torch.zeros(self.nclasses - 2).to(self.device)
+        union_cum = torch.zeros(self.nclasses - 2).to(self.device)
+
         with torch.no_grad():
             progress_bar = tqdm(valid_dataloader)
             for i, batch in enumerate(progress_bar):
@@ -271,25 +337,27 @@ class Trainer(object):
                 batch['lidar'] = batch['lidar'].to(self.device, non_blocking=True)
                 batch['anno'] = batch['anno'].to(self.device, non_blocking=True)
 
-                lidar_input = batch['rgb'] if self.rgb_only else batch['lidar']
-                _, output_seg = self.model(batch['rgb'], lidar_input, modal)
+                # Prepare model inputs based on training mode
+                if self.rgb_only or modal == 'rgb':
+                    # RGB-only mode: use RGB data for both inputs
+                    rgb_input = batch['rgb']
+                    lidar_input = batch['rgb']
+                elif modal == 'lidar':
+                    # LiDAR-only mode: use LiDAR data for both inputs
+                    rgb_input = batch['lidar']
+                    lidar_input = batch['lidar']
+                else:
+                    # Cross-fusion mode: use RGB and LiDAR data
+                    rgb_input = batch['rgb']
+                    lidar_input = batch['lidar']
+
+                # Forward pass through model
+                _, output_seg = self.model(rgb_input, lidar_input, modal)
                 # 1xHxW -> HxW
                 output_seg = output_seg.squeeze(1)
                 anno = batch['anno']
 
-                if modal in ['lidar', 'cross_fusion'] and 'camera_coord' in batch:
-                    # Use point-based IoU for LIDAR-based modalities
-                    batch_overlap, batch_pred, batch_label, batch_union = zod_point_overlap(self.nclasses, output_seg, anno, batch['camera_coord'])
-                else:
-                    batch_overlap, batch_pred, batch_label, batch_union = self.find_overlap_func(self.nclasses, output_seg, anno)
-
-                # For cross_fusion and lidar, also accumulate 2D IoU
-                if modal in ['lidar', 'cross_fusion']:
-                    batch_overlap_2d, batch_pred_2d, batch_label_2d, batch_union_2d = self.find_overlap_func(self.nclasses, output_seg, anno)
-                    self.cross_fusion_2d_cum['overlap'] += batch_overlap_2d
-                    self.cross_fusion_2d_cum['pred'] += batch_pred_2d
-                    self.cross_fusion_2d_cum['label'] += batch_label_2d
-                    self.cross_fusion_2d_cum['union'] += batch_union_2d
+                batch_overlap, batch_pred, batch_label, batch_union = self.find_overlap_func(self.nclasses, output_seg, anno)
 
                 overlap_cum += batch_overlap
                 pred_cum += batch_pred
@@ -302,26 +370,26 @@ class Trainer(object):
 
         # The IoU of one epoch
         valid_epoch_IoU = overlap_cum / union_cum
+        print(f'Validation Mean IoU for Epoch: {torch.mean(valid_epoch_IoU):.4f}')
         for i, cls in enumerate(self.eval_classes):
             print(f'Validation {cls} IoU for Epoch: {valid_epoch_IoU[i]:.4f}')
         # The loss_rgb of one epoch
-        valid_epoch_loss = valid_loss / (i + 1)
+        valid_epoch_loss = valid_loss / len(valid_dataloader)
         print(f'Average Validation Loss for Epoch: {valid_epoch_loss:.4f}')
-
-        # For cross_fusion and lidar, also print 2D IoU
-        if modal in ['lidar', 'cross_fusion']:
-            valid_epoch_IoU_2d = self.cross_fusion_2d_cum['overlap'] / self.cross_fusion_2d_cum['union']
-            for i, cls in enumerate(self.eval_classes):
-                print(f'Validation 2D {cls} IoU for Epoch: {valid_epoch_IoU_2d[i]:.4f}')
 
         # Compute additional metrics
         valid_precision = overlap_cum / (pred_cum + 1e-6)
         valid_recall = overlap_cum / (label_cum + 1e-6)
         valid_f1 = 2 * valid_precision * valid_recall / (valid_precision + valid_recall + 1e-6)
 
-        # Print precision/recall/F1 for point-based validation
-        if modal in ['lidar', 'cross_fusion']:
-            for i, cls in enumerate(self.eval_classes):
-                print(f'Point-based {cls} Precision: {valid_precision[i]:.4f}, Recall: {valid_recall[i]:.4f}, F1: {valid_f1[i]:.4f}')
+        # Return metrics as dictionary (consistent with training metrics)
+        val_metrics = {
+            'epoch_IoU': valid_epoch_IoU,
+            'precision': valid_precision,
+            'recall': valid_recall,
+            'f1': valid_f1,
+            'epoch_loss': valid_epoch_loss,
+            'mean_iou': torch.mean(valid_epoch_IoU).item()
+        }
 
-        return valid_epoch_loss, valid_epoch_IoU, valid_precision, valid_recall, valid_f1
+        return val_metrics

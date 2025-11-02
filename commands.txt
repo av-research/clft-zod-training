@@ -1,6 +1,6 @@
 conda activate conda_py39
 chmod +x train.sh
-sbatch -J train-1 train.slurm ./config/zod_hpc/config_1.json
+sbatch -J train-7z train.slurm ./config/zod_hpc/config_7.json
 watch -n1 squeue -u totahv
 
 python3 -m venv venv
@@ -8,10 +8,17 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 ssh totahv@base.hpc.taltech.ee
-cd /gpfs/mariana/smbhome/totahv/clft-zod-training
+cd /gpfs/mariana/smbhome/totahv/
+cd /gpfs/mariana/home/totahv/
 
-sbatch -J train-1 train.slurm ./config/config_1.json
+sbatch -J train-1z train.slurm ./config/zod_hpc/config_1.json
+sbatch -J train-4z train.slurm ./config/zod_hpc/config_4.json
+sbatch -J train-7z train.slurm ./config/zod_hpc/config_7.json
+sbatch -J train-7w train.slurm ./config/waymo_hpc/config_7.json
 watch -n1 squeue -u totahv
-rsync -avz /media/tom/ml/projects/clft-zod-training/zod_dataset totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/clft-zod-training
 
-rsync -avz totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/zod_logs/config_1 /media/tom/ml/zod_logs/
+# Copy json files from server to local
+rsync -avz --exclude="*.pth" totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/zod_logs/ /media/tom/ml/zod_logs
+
+# Copy zod_dataset to server
+rsync -avz /media/tom/ml/projects/clft-zod-training/zod_dataset totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/clft-zod-training/
