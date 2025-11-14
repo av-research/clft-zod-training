@@ -1,0 +1,2924 @@
+openapi: 3.0.3
+info:
+  title: Vision Service API
+  description: API for managing vision datasets, training runs, epochs, configurations, and analysis data
+  version: 1.0.0
+  contact:
+    name: Tumbaland Team
+servers:
+  - url: http://localhost:4010/api
+    description: Development server
+  - url: https://vision-api.tumbaland.eu/api
+    description: Production server
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Error description"
+      required:
+        - success
+        - message
+
+    Dataset:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        uuid:
+          type: string
+          example: "dataset-uuid-123"
+        name:
+          type: string
+          example: "Waymo Dataset"
+        description:
+          type: string
+          example: "Autonomous driving dataset from Waymo"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00.000Z"
+        dataset_info:
+          type: object
+          description: "Additional dataset information"
+        annotations:
+          type: object
+          description: "Annotation metadata"
+        camera:
+          type: object
+          description: "Camera configuration"
+        lidar:
+          type: object
+          description: "LiDAR configuration"
+        metadata:
+          type: object
+          description: "Additional metadata"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - uuid
+        - name
+        - timestamp
+
+    DatasetAnalysis:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        dataset:
+          type: string
+          example: "waymo"
+        data:
+          type: object
+          description: "Analysis data (dynamic JSON structure)"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - dataset
+        - data
+
+    DatasetImage:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        filename:
+          type: string
+          example: "image_001.jpg"
+        originalName:
+          type: string
+          example: "original_image.jpg"
+        minioFileId:
+          type: string
+          example: "vision/waymo/1234567890-abc123/original.jpg"
+        minioThumbnailFileId:
+          type: string
+          example: "vision/waymo/1234567890-abc123/thumbnail.jpg"
+        datasetId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        title:
+          type: string
+          example: "Traffic scene"
+        description:
+          type: string
+          example: "Image showing traffic intersection"
+        mimetype:
+          type: string
+          example: "image/jpeg"
+        size:
+          type: integer
+          example: 1024000
+        width:
+          type: integer
+          example: 1920
+        height:
+          type: integer
+          example: 1080
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["traffic", "intersection", "daytime"]
+        metadata:
+          type: object
+          description: "Additional metadata"
+        signedUrl:
+          type: string
+          description: "Temporary signed URL for accessing the image"
+        signedUrlExpiresAt:
+          type: string
+          format: date-time
+        signedUrlExpiresInMinutes:
+          type: integer
+          example: 60
+        thumbnailSignedUrl:
+          type: string
+          description: "Temporary signed URL for accessing the thumbnail"
+        thumbnailSignedUrlExpiresAt:
+          type: string
+          format: date-time
+        thumbnailSignedUrlExpiresInMinutes:
+          type: integer
+          example: 60
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - filename
+        - originalName
+        - minioFileId
+        - datasetId
+        - mimetype
+        - size
+
+    Training:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        uuid:
+          type: string
+          example: "training-uuid-123"
+        name:
+          type: string
+          example: "YOLOv5 Training Run"
+        description:
+          type: string
+          example: "Training YOLOv5 on Waymo dataset"
+        model:
+          type: string
+          example: "yolov5"
+        dataset:
+          type: string
+          example: "waymo"
+        status:
+          type: string
+          enum: ["pending", "running", "completed", "failed"]
+          example: "completed"
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        metrics:
+          type: object
+          description: "Training metrics"
+        metadata:
+          type: object
+          description: "Additional metadata"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - uuid
+        - name
+        - model
+        - dataset
+        - status
+
+    Epoch:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        uuid:
+          type: string
+          example: "epoch-uuid-123"
+        trainingId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        epoch:
+          type: integer
+          example: 10
+        metrics:
+          type: object
+          description: "Epoch metrics"
+        loss:
+          type: number
+          example: 0.123
+        accuracy:
+          type: number
+          example: 0.95
+        validation_loss:
+          type: number
+          example: 0.145
+        validation_accuracy:
+          type: number
+          example: 0.92
+        learning_rate:
+          type: number
+          example: 0.001
+        metadata:
+          type: object
+          description: "Additional metadata"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - trainingId
+        - epoch
+
+    Config:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        uuid:
+          type: string
+          example: "config-uuid-123"
+        trainingId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          example: "YOLOv5 Config"
+        config:
+          type: object
+          description: "Configuration data"
+        metadata:
+          type: object
+          description: "Additional metadata"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - trainingId
+        - name
+        - config
+
+    Comment:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        trainingId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        userId:
+          type: string
+          example: "user-123"
+        comment:
+          type: string
+          example: "This training run shows promising results"
+        timestamp:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          description: "Additional metadata"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - trainingId
+        - userId
+        - comment
+
+    TestResult:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00.000Z"
+        epoch:
+          type: integer
+          example: 10
+        epoch_uuid:
+          type: string
+          example: "epoch-uuid-123"
+        test_uuid:
+          type: string
+          example: "test-uuid-456"
+        test_results:
+          type: object
+          description: "Test results data with metrics per condition and class"
+          example:
+            "condition1":
+              "class1":
+                iou: 0.85
+                precision: 0.92
+                recall: 0.88
+                f1_score: 0.90
+                average_precision: 0.87
+              "class2":
+                iou: 0.78
+                precision: 0.85
+                recall: 0.82
+                f1_score: 0.83
+                average_precision: 0.80
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - timestamp
+        - epoch
+        - epoch_uuid
+        - test_uuid
+        - test_results
+
+    # Request/Response schemas
+    DatasetImageCreateRequest:
+      type: object
+      properties:
+        filename:
+          type: string
+          example: "image_001.jpg"
+        originalName:
+          type: string
+          example: "original_image.jpg"
+        minioFileId:
+          type: string
+          example: "vision/waymo/1234567890-abc123/original.jpg"
+        datasetId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        title:
+          type: string
+          example: "Traffic scene"
+        description:
+          type: string
+          example: "Image showing traffic intersection"
+        mimetype:
+          type: string
+          example: "image/jpeg"
+        size:
+          type: integer
+          example: 1024000
+        width:
+          type: integer
+          example: 1920
+        height:
+          type: integer
+          example: 1080
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["traffic", "intersection"]
+        metadata:
+          type: object
+      required:
+        - filename
+        - originalName
+        - minioFileId
+        - datasetId
+        - mimetype
+        - size
+
+    DatasetImageUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          example: "Updated traffic scene"
+        description:
+          type: string
+          example: "Updated description"
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["traffic", "intersection", "updated"]
+        metadata:
+          type: object
+
+    UploadSignedUrlRequest:
+      type: object
+      properties:
+        filename:
+          type: string
+          example: "image_001.jpg"
+        mimetype:
+          type: string
+          example: "image/jpeg"
+        datasetId:
+          type: string
+          example: "waymo"
+      required:
+        - filename
+        - mimetype
+        - datasetId
+
+    UploadSignedUrlResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            uploadUrl:
+              type: string
+              example: "https://minio.example.com/vision/waymo/..."
+            minioFileId:
+              type: string
+              example: "vision/waymo/1234567890-abc123/original.jpg"
+            datasetId:
+              type: string
+              example: "waymo"
+            expiresInMinutes:
+              type: integer
+              example: 15
+      required:
+        - success
+        - data
+
+    DatasetImagesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            images:
+              type: array
+              items:
+                $ref: '#/components/schemas/DatasetImage'
+            pagination:
+              type: object
+              properties:
+                page:
+                  type: integer
+                  example: 1
+                limit:
+                  type: integer
+                  example: 50
+                total:
+                  type: integer
+                  example: 100
+                pages:
+                  type: integer
+                  example: 2
+      required:
+        - success
+        - data
+
+    AnalysisResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatasetAnalysis'
+        pagination:
+          type: object
+          properties:
+            total:
+              type: integer
+              example: 50
+            limit:
+              type: integer
+              example: 10
+            skip:
+              type: integer
+              example: 0
+      required:
+        - success
+        - data
+        - pagination
+
+    AnalysisComparisonRequest:
+      type: object
+      properties:
+        analysisIds:
+          type: array
+          items:
+            type: string
+          example: ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"]
+      required:
+        - analysisIds
+
+    AnalysisComparisonResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            comparison:
+              type: array
+              items:
+                type: object
+                properties:
+                  analysis:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                      dataset:
+                        type: string
+                      createdAt:
+                        type: string
+                        format: date-time
+                      updatedAt:
+                        type: string
+                        format: date-time
+                  data:
+                    type: object
+                    description: "Analysis data"
+            summary:
+              type: object
+              properties:
+                totalAnalyses:
+                  type: integer
+                  example: 2
+                datasets:
+                  type: array
+                  items:
+                    type: string
+                  example: ["waymo", "zod"]
+      required:
+        - success
+        - data
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Operation completed successfully"
+        data:
+          type: object
+          description: "Response data (varies by endpoint)"
+      required:
+        - success
+        - message
+
+    # Test Result Request/Response schemas
+    TestResultCreateRequest:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00.000Z"
+        epoch:
+          type: integer
+          example: 10
+        epoch_uuid:
+          type: string
+          example: "epoch-uuid-123"
+        test_uuid:
+          type: string
+          example: "test-uuid-456"
+        test_results:
+          type: object
+          description: "Test results data"
+      required:
+        - epoch
+        - epoch_uuid
+        - test_results
+
+    TestResultUpdateRequest:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00.000Z"
+        epoch:
+          type: integer
+          example: 10
+        epoch_uuid:
+          type: string
+          example: "epoch-uuid-123"
+        test_results:
+          type: object
+          description: "Updated test results data"
+
+    TestResultsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            testResults:
+              type: array
+              items:
+                $ref: '#/components/schemas/TestResult'
+            pagination:
+              type: object
+              properties:
+                page:
+                  type: integer
+                  example: 1
+                limit:
+                  type: integer
+                  example: 50
+                total:
+                  type: integer
+                  example: 100
+                pages:
+                  type: integer
+                  example: 2
+            total:
+              type: integer
+              example: 100
+      required:
+        - success
+        - data
+
+    TestResultEpochsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            epochs:
+              type: array
+              items:
+                type: integer
+              example: [1, 2, 5, 10, 15, 20]
+      required:
+        - success
+        - data
+
+paths:
+  # Dataset Analysis Endpoints
+  /analysis/upload:
+    post:
+      summary: Upload analysis JSON data
+      description: Upload analysis data for a dataset (creates new analysis if dataset doesn't exist)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dataset:
+                  type: string
+                  example: "waymo"
+                data:
+                  type: object
+                  description: "Analysis data (any JSON structure)"
+              required:
+                - dataset
+                - data
+      responses:
+        '201':
+          description: Analysis uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /analysis:
+    get:
+      summary: Get all analyses
+      description: Retrieve all dataset analyses with optional filtering and pagination
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of analyses to return
+        - name: skip
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Number of analyses to skip
+        - name: dataset
+          in: query
+          schema:
+            type: string
+          description: Filter by dataset name
+      responses:
+        '200':
+          description: Analyses retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /analysis/dataset/{name}:
+    get:
+      summary: Get analyses by dataset name
+      description: Retrieve all analyses for a specific dataset
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Dataset name (e.g., 'waymo', 'zod')
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of analyses to return
+        - name: skip
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Number of analyses to skip
+      responses:
+        '200':
+          description: Analyses retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /analysis/{id}:
+    get:
+      summary: Get analysis by ID
+      description: Retrieve a specific analysis by its ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Analysis ID
+      responses:
+        '200':
+          description: Analysis retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Analysis not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update analysis
+      description: Update an existing analysis
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Analysis ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dataset:
+                  type: string
+                  example: "waymo"
+                data:
+                  type: object
+                  description: "Updated analysis data"
+              required:
+                - dataset
+                - data
+      responses:
+        '200':
+          description: Analysis updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Analysis not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete analysis
+      description: Delete an analysis by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Analysis ID
+      responses:
+        '200':
+          description: Analysis deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Analysis not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /analysis/compare:
+    post:
+      summary: Compare multiple analyses
+      description: Compare data from multiple analyses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisComparisonRequest'
+      responses:
+        '200':
+          description: Analyses compared successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisComparisonResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Dataset Image Endpoints
+  /dataset-images/dataset/{datasetId}:
+    get:
+      summary: Get images by dataset
+      description: Retrieve all images for a specific dataset with pagination and search
+      parameters:
+        - name: datasetId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Dataset ID or name
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          description: Number of images per page
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search query for title, description, or tags
+      responses:
+        '200':
+          description: Images retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetImagesResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /dataset-images/{id}:
+    get:
+      summary: Get image by ID
+      description: Retrieve a specific dataset image by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Image ID
+      responses:
+        '200':
+          description: Image retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Image not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update image
+      description: Update image metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Image ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetImageUpdateRequest'
+      responses:
+        '200':
+          description: Image updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Image not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete image
+      description: Delete an image and its files from storage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Image ID
+      responses:
+        '200':
+          description: Image deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Image not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /dataset-images:
+    post:
+      summary: Create dataset image
+      description: Create a new dataset image record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetImageCreateRequest'
+      responses:
+        '201':
+          description: Image created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Image with this MinIO file ID already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /dataset-images/upload-url:
+    post:
+      summary: Get upload signed URL
+      description: Generate a signed URL for direct client upload to MinIO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadSignedUrlRequest'
+      responses:
+        '200':
+          description: Upload URL generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadSignedUrlResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Dataset Endpoints
+  /datasets:
+    get:
+      summary: Get all datasets
+      description: Retrieve all datasets with pagination
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of datasets per page
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search query for name or description
+      responses:
+        '200':
+          description: Datasets retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Create dataset
+      description: Create a new dataset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uuid:
+                  type: string
+                  example: "dataset-uuid-123"
+                name:
+                  type: string
+                  example: "Waymo Dataset"
+                description:
+                  type: string
+                  example: "Autonomous driving dataset"
+                timestamp:
+                  type: string
+                  format: date-time
+                  example: "2023-01-01T00:00:00.000Z"
+                dataset_info:
+                  type: object
+                annotations:
+                  type: object
+                camera:
+                  type: object
+                lidar:
+                  type: object
+                metadata:
+                  type: object
+              required:
+                - uuid
+                - name
+                - timestamp
+      responses:
+        '201':
+          description: Dataset created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /datasets/{id}:
+    get:
+      summary: Get dataset by ID
+      description: Retrieve a specific dataset by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Dataset ID
+      responses:
+        '200':
+          description: Dataset retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Dataset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update dataset
+      description: Update an existing dataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Dataset ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Updated Dataset Name"
+                description:
+                  type: string
+                  example: "Updated description"
+                dataset_info:
+                  type: object
+                annotations:
+                  type: object
+                camera:
+                  type: object
+                lidar:
+                  type: object
+                metadata:
+                  type: object
+      responses:
+        '200':
+          description: Dataset updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Dataset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete dataset
+      description: Delete a dataset by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Dataset ID
+      responses:
+        '200':
+          description: Dataset deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Dataset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /datasets/uuid/{uuid}:
+    get:
+      summary: Get dataset by UUID
+      description: Retrieve a specific dataset by UUID
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Dataset UUID
+      responses:
+        '200':
+          description: Dataset retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Dataset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Training Endpoints
+  /trainings:
+    get:
+      summary: Get all trainings
+      description: Retrieve all training runs with pagination and filtering
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of trainings per page
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search query for name or description
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: ["pending", "running", "completed", "failed"]
+          description: Filter by training status
+        - name: model
+          in: query
+          schema:
+            type: string
+          description: Filter by model type
+        - name: dataset
+          in: query
+          schema:
+            type: string
+          description: Filter by dataset
+      responses:
+        '200':
+          description: Trainings retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Create training
+      description: Create a new training run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uuid:
+                  type: string
+                  example: "training-uuid-123"
+                name:
+                  type: string
+                  example: "YOLOv5 Training Run"
+                description:
+                  type: string
+                  example: "Training YOLOv5 on Waymo dataset"
+                model:
+                  type: string
+                  example: "yolov5"
+                dataset:
+                  type: string
+                  example: "waymo"
+                status:
+                  type: string
+                  enum: ["pending", "running", "completed", "failed"]
+                  default: "pending"
+                startTime:
+                  type: string
+                  format: date-time
+                endTime:
+                  type: string
+                  format: date-time
+                metrics:
+                  type: object
+                metadata:
+                  type: object
+              required:
+                - uuid
+                - name
+                - model
+                - dataset
+      responses:
+        '201':
+          description: Training created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /trainings/{id}:
+    get:
+      summary: Get training by ID
+      description: Retrieve a specific training run by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Training ID
+      responses:
+        '200':
+          description: Training retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Training not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update training
+      description: Update an existing training run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Training ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Updated Training Name"
+                description:
+                  type: string
+                  example: "Updated description"
+                status:
+                  type: string
+                  enum: ["pending", "running", "completed", "failed"]
+                startTime:
+                  type: string
+                  format: date-time
+                endTime:
+                  type: string
+                  format: date-time
+                metrics:
+                  type: object
+                metadata:
+                  type: object
+      responses:
+        '200':
+          description: Training updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Training not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete training
+      description: Delete a training run by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Training ID
+      responses:
+        '200':
+          description: Training deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Training not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /trainings/uuid/{uuid}:
+    get:
+      summary: Get training by UUID
+      description: Retrieve a specific training run by UUID
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Training UUID
+      responses:
+        '200':
+          description: Training retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Training not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /trainings/{id}/epochs:
+    get:
+      summary: Get training with epochs
+      description: Retrieve a training run with all its epochs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Training ID
+      responses:
+        '200':
+          description: Training with epochs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Training not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /trainings/stats:
+    get:
+      summary: Get training statistics
+      description: Retrieve aggregated statistics for all training runs
+      responses:
+        '200':
+          description: Training statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /trainings/compare:
+    post:
+      summary: Compare trainings
+      description: Compare multiple training runs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                trainingIds:
+                  type: array
+                  items:
+                    type: string
+                  example: ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"]
+              required:
+                - trainingIds
+      responses:
+        '200':
+          description: Trainings compared successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Epoch Endpoints
+  /epochs/training/{trainingId}:
+    get:
+      summary: Get epochs by training
+      description: Retrieve all epochs for a specific training run
+      parameters:
+        - name: trainingId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Training ID
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of epochs per page
+      responses:
+        '200':
+          description: Epochs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /epochs/{id}:
+    get:
+      summary: Get epoch by ID
+      description: Retrieve a specific epoch by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Epoch ID
+      responses:
+        '200':
+          description: Epoch retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Epoch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update epoch
+      description: Update an existing epoch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Epoch ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                metrics:
+                  type: object
+                loss:
+                  type: number
+                  example: 0.123
+                accuracy:
+                  type: number
+                  example: 0.95
+                validation_loss:
+                  type: number
+                  example: 0.145
+                validation_accuracy:
+                  type: number
+                  example: 0.92
+                learning_rate:
+                  type: number
+                  example: 0.001
+                metadata:
+                  type: object
+      responses:
+        '200':
+          description: Epoch updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Epoch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete epoch
+      description: Delete an epoch by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Epoch ID
+      responses:
+        '200':
+          description: Epoch deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Epoch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /epochs/uuid/{uuid}:
+    get:
+      summary: Get epoch by UUID
+      description: Retrieve a specific epoch by UUID
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Epoch UUID
+      responses:
+        '200':
+          description: Epoch retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Epoch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /epochs:
+    post:
+      summary: Create epoch
+      description: Create a new epoch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uuid:
+                  type: string
+                  example: "epoch-uuid-123"
+                trainingId:
+                  type: string
+                  example: "507f1f77bcf86cd799439011"
+                epoch:
+                  type: integer
+                  example: 10
+                metrics:
+                  type: object
+                loss:
+                  type: number
+                  example: 0.123
+                accuracy:
+                  type: number
+                  example: 0.95
+                validation_loss:
+                  type: number
+                  example: 0.145
+                validation_accuracy:
+                  type: number
+                  example: 0.92
+                learning_rate:
+                  type: number
+                  example: 0.001
+                metadata:
+                  type: object
+              required:
+                - trainingId
+                - epoch
+      responses:
+        '201':
+          description: Epoch created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /epochs/upload:
+    post:
+      summary: Create epoch from JSON
+      description: Upload epoch data from JSON file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: "Epoch data in JSON format"
+      responses:
+        '201':
+          description: Epoch created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /epochs/batch:
+    post:
+      summary: Create epochs batch
+      description: Create multiple epochs at once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                epochs:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      uuid:
+                        type: string
+                      trainingId:
+                        type: string
+                      epoch:
+                        type: integer
+                      metrics:
+                        type: object
+                      loss:
+                        type: number
+                      accuracy:
+                        type: number
+                      validation_loss:
+                        type: number
+                      validation_accuracy:
+                        type: number
+                      learning_rate:
+                        type: number
+                      metadata:
+                        type: object
+                    required:
+                      - trainingId
+                      - epoch
+              required:
+                - epochs
+      responses:
+        '201':
+          description: Epochs created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Config Endpoints
+  /configs:
+    get:
+      summary: Get all configs
+      description: Retrieve all configurations with pagination
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of configs per page
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search query for name
+      responses:
+        '200':
+          description: Configs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Create config
+      description: Create a new configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uuid:
+                  type: string
+                  example: "config-uuid-123"
+                trainingId:
+                  type: string
+                  example: "507f1f77bcf86cd799439011"
+                name:
+                  type: string
+                  example: "YOLOv5 Config"
+                config:
+                  type: object
+                  description: "Configuration data"
+                metadata:
+                  type: object
+              required:
+                - trainingId
+                - name
+                - config
+      responses:
+        '201':
+          description: Config created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /configs/training/{trainingId}:
+    get:
+      summary: Get configs by training
+      description: Retrieve all configurations for a specific training run
+      parameters:
+        - name: trainingId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Training ID
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of configs per page
+      responses:
+        '200':
+          description: Configs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /configs/{id}:
+    get:
+      summary: Get config by ID
+      description: Retrieve a specific configuration by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Config ID
+      responses:
+        '200':
+          description: Config retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Config not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update config
+      description: Update an existing configuration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Config ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Updated Config Name"
+                config:
+                  type: object
+                  description: "Updated configuration data"
+                metadata:
+                  type: object
+      responses:
+        '200':
+          description: Config updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Config not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete config
+      description: Delete a configuration by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Config ID
+      responses:
+        '200':
+          description: Config deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Config not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /configs/uuid/{uuid}:
+    get:
+      summary: Get config by UUID
+      description: Retrieve a specific configuration by UUID
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Config UUID
+      responses:
+        '200':
+          description: Config retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Config not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /configs/upload:
+    post:
+      summary: Create config from JSON
+      description: Upload configuration data from JSON file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: "Configuration data in JSON format"
+      responses:
+        '201':
+          description: Config created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /configs/batch:
+    post:
+      summary: Create configs batch
+      description: Create multiple configurations at once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                configs:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      uuid:
+                        type: string
+                      trainingId:
+                        type: string
+                      name:
+                        type: string
+                      config:
+                        type: object
+                      metadata:
+                        type: object
+                    required:
+                      - trainingId
+                      - name
+                      - config
+              required:
+                - configs
+      responses:
+        '201':
+          description: Configs created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Comment Endpoints
+  /comments/training/{trainingId}:
+    get:
+      summary: Get comments by training
+      description: Retrieve all comments for a specific training run
+      parameters:
+        - name: trainingId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Training ID
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of comments per page
+      responses:
+        '200':
+          description: Comments retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /comments:
+    post:
+      summary: Create comment
+      description: Create a new comment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                trainingId:
+                  type: string
+                  example: "507f1f77bcf86cd799439011"
+                userId:
+                  type: string
+                  example: "user-123"
+                comment:
+                  type: string
+                  example: "This training run shows promising results"
+                timestamp:
+                  type: string
+                  format: date-time
+                metadata:
+                  type: object
+              required:
+                - trainingId
+                - userId
+                - comment
+      responses:
+        '201':
+          description: Comment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /comments/{id}:
+    put:
+      summary: Update comment
+      description: Update an existing comment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Comment ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+                  example: "Updated comment text"
+                metadata:
+                  type: object
+      responses:
+        '200':
+          description: Comment updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Comment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete comment
+      description: Delete a comment by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Comment ID
+      responses:
+        '200':
+          description: Comment deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Comment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Test Result Endpoints
+  /test-results:
+    get:
+      summary: Get all test results
+      description: Retrieve all test results with optional pagination, filtering, and sorting
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          description: Number of test results per page
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            default: timestamp
+            enum: [timestamp, epoch]
+          description: Field to sort by
+        - name: order
+          in: query
+          schema:
+            type: string
+            default: desc
+            enum: [asc, desc]
+          description: Sort order
+        - name: epoch
+          in: query
+          schema:
+            type: integer
+          description: Filter by epoch number
+      responses:
+        '200':
+          description: Test results retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestResultsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      summary: Create test result
+      description: Create a new test result
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestResultCreateRequest'
+      responses:
+        '201':
+          description: Test result created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Test result with this test_uuid already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /test-results/upload:
+    post:
+      summary: Create test result from JSON
+      description: Upload test result data from JSON file (accepts the full JSON structure)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: "Test result data in JSON format"
+      responses:
+        '201':
+          description: Test result created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Test result with this test_uuid already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /test-results/epochs:
+    get:
+      summary: Get test result epochs
+      description: Retrieve all unique epoch numbers that have test results
+      responses:
+        '200':
+          description: Test result epochs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestResultEpochsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /test-results/{id}:
+    get:
+      summary: Get test result by ID
+      description: Retrieve a specific test result by its ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Test result ID
+      responses:
+        '200':
+          description: Test result retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Test result not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      summary: Update test result
+      description: Update an existing test result
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Test result ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestResultUpdateRequest'
+      responses:
+        '200':
+          description: Test result updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Test result not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      summary: Delete test result
+      description: Delete a test result by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Test result ID
+      responses:
+        '200':
+          description: Test result deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Test result not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /test-results/test/{testUuid}:
+    get:
+      summary: Get test result by test UUID
+      description: Retrieve a specific test result by its test UUID
+      parameters:
+        - name: testUuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Test UUID
+      responses:
+        '200':
+          description: Test result retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Test result not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /test-results/epoch/{epochUuid}:
+    get:
+      summary: Get test results by epoch UUID
+      description: Retrieve all test results for a specific epoch UUID
+      parameters:
+        - name: epochUuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Epoch UUID
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          description: Number of test results per page
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            default: timestamp
+            enum: [timestamp]
+          description: Field to sort by
+        - name: order
+          in: query
+          schema:
+            type: string
+            default: desc
+            enum: [asc, desc]
+          description: Sort order
+      responses:
+        '200':
+          description: Test results retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestResultsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

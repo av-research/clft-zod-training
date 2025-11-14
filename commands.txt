@@ -1,8 +1,3 @@
-conda activate conda_py39
-chmod +x train.sh
-sbatch -J train-7z train.slurm ./config/zod_hpc/config_7.json
-watch -n1 squeue -u totahv
-
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -11,14 +6,48 @@ ssh totahv@base.hpc.taltech.ee
 cd /gpfs/mariana/smbhome/totahv/
 cd /gpfs/mariana/home/totahv/
 
+watch -n1 squeue -u totahv
+
+# ZOD Base
 sbatch -J train-1z train.slurm ./config/zod_hpc/config_1.json
 sbatch -J train-4z train.slurm ./config/zod_hpc/config_4.json
 sbatch -J train-7z train.slurm ./config/zod_hpc/config_7.json
+
+# Waymo Base
+sbatch -J train-1w train.slurm ./config/waymo_hpc/config_1.json
+sbatch -J train-4w train.slurm ./config/waymo_hpc/config_4.json
 sbatch -J train-7w train.slurm ./config/waymo_hpc/config_7.json
-watch -n1 squeue -u totahv
+
+# ZOD Hybrid
+sbatch -J train-2z train.slurm ./config/zod_hpc/config_2.json
+sbatch -J train-5z train.slurm ./config/zod_hpc/config_5.json
+sbatch -J train-8z train.slurm ./config/zod_hpc/config_8.json
+
+# Waymo Hybrid
+sbatch -J train-2w train.slurm ./config/waymo_hpc/config_2.json
+sbatch -J train-5w train.slurm ./config/waymo_hpc/config_5.json
+sbatch -J train-8w train.slurm ./config/waymo_hpc/config_8.json
+
+# ZOD Large
+sbatch -J train-3z train.slurm ./config/zod_hpc/config_3.json
+sbatch -J train-6z train.slurm ./config/zod_hpc/config_6.json
+sbatch -J train-9z train.slurm ./config/zod_hpc/config_9.json
+
+# Waymo Large
+sbatch -J train-3w train.slurm ./config/waymo_hpc/config_3.json
+sbatch -J train-6w train.slurm ./config/waymo_hpc/config_6.json
+sbatch -J train-9w train.slurm ./config/waymo_hpc/config_9.json
+
+# Model specialization
+sbatch -J tr-1w1 train.slurm ./config/waymo/config_1.json
+sbatch -J tr-1w2 train.slurm ./config/waymo/config_1_all_classes.json
+sbatch -J tr-1w3 train.slurm ./config/waymo/config_1_vehicles_only.json
 
 # Copy json files from server to local
-rsync -avz --exclude="*.pth" totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/zod_logs/ /media/tom/ml/zod_logs
+rsync -avz --include='*/' --include='*.json' --exclude='*' totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/zod_logs/ /media/tom/ml/zod_logs
+
+# Copy latest pth file from server to local
+rsync -avz totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/clft-zod-training/logs/waymo/config_1_all_classes/progress_save/checkpoint_39.pth /media/tom/ml/waymo/config_1_all_classes
 
 # Copy zod_dataset to server
 rsync -avz /media/tom/ml/projects/clft-zod-training/zod_dataset totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/clft-zod-training/

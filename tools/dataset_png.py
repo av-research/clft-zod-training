@@ -18,9 +18,8 @@ from PIL import Image
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 from torch.utils.data import Dataset
-from utils.helpers import zod_anno_class_relabel
 from utils.lidar_process import *
-from utils.data_augment import DataAugment
+from utils.helpers import relabel_annotation
 
 
 class DatasetPNG(Dataset):
@@ -97,16 +96,26 @@ class DatasetPNG(Dataset):
             elif self.config.get('CLI', {}).get('mode') == 'lidar':
                 anno_path = cam_path.replace('/camera', '/annotation_lidar_only')
             elif self.config.get('CLI', {}).get('mode') == 'cross_fusion':
-                anno_path = cam_path.replace('/camera', '/annotation_fusion')
+                anno_path = cam_path.replace('/camera', '/annotation_camera_only')
 
             # Use PNG instead of pickle
             png_path = cam_path.replace('/camera', '/lidar_png').replace('.png', '.png')
 
             rgb = Image.open(cam_path).convert('RGB')
-            anno = zod_anno_class_relabel(Image.open(anno_path))
+            # Raw ZOD annotations are already in the correct format for the config
+            anno = torch.from_numpy(np.array(Image.open(anno_path))).unsqueeze(0).long()
+            
+            # Apply configurable relabeling based on config classes
+            anno = relabel_annotation(anno.squeeze(0), self.config)
 
-            # Load LiDAR projection from PNG instead of processing pickle
-            lidar_pil = self.load_lidar_png(png_path)
+            # Load LiDAR projection from PNG only if not in RGB-only mode
+            rgb_only = self.config.get('CLI', {}).get('mode') == 'rgb'
+            if rgb_only:
+                # For RGB-only mode, create a dummy LiDAR image
+                lidar_pil = Image.new('RGB', rgb.size, (0, 0, 0))
+            else:
+                # Load LiDAR projection from PNG
+                lidar_pil = self.load_lidar_png(png_path)
 
         else:
             raise ValueError("Only ZOD dataset is currently supported with PNG loader")
@@ -114,9 +123,10 @@ class DatasetPNG(Dataset):
         # Validate filenames match
         rgb_name = cam_path.split('/')[-1].split('.')[0]
         anno_name = anno_path.split('/')[-1].split('.')[0]
-        png_name = png_path.split('/')[-1].split('.')[0]
         assert (rgb_name == anno_name), "rgb and anno input not matching"
-        assert (rgb_name == png_name), "rgb and png input not matching"
+        if not rgb_only:
+            png_name = png_path.split('/')[-1].split('.')[0]
+            assert (rgb_name == png_name), "rgb and png input not matching"
 
         # Keep full image (no cropping)
         rgb_orig = rgb.copy()
@@ -132,16 +142,21 @@ class DatasetPNG(Dataset):
 
         # Apply random crop
         if random.random() < self.p_crop:
-            # Use torchvision's RandomResizedCrop to get crop parameters
+            # Use resized crop for more variation (like DataAugment)
+            random_size = random.randint(128, self.img_size - 1)
             i, j, h, w = transforms.RandomResizedCrop.get_params(
                 rgb_aug, scale=(0.2, 1.0), ratio=(3./4., 4./3.))
-            rgb_aug = TF.crop(rgb_aug, i, j, h, w)
-            anno_aug = TF.crop(anno_aug, i, j, h, w)
-            lidar_aug = TF.crop(lidar_aug, i, j, h, w)
+            rgb_aug = TF.resized_crop(rgb_aug, i, j, h, w, (random_size, random_size),
+                                     interpolation=TF.InterpolationMode.BILINEAR)
+            anno_aug = TF.resized_crop(anno_aug, i, j, h, w, (random_size, random_size),
+                                      interpolation=TF.InterpolationMode.NEAREST)
+            lidar_aug = TF.resized_crop(lidar_aug, i, j, h, w, (random_size, random_size),
+                                       interpolation=TF.InterpolationMode.BILINEAR)
 
         # Apply random rotation
         if random.random() < self.p_rot:
-            angle = random.choice([-10, -5, 5, 10])
+            rotate_range = self.config['Dataset']['transforms']['random_rotate_range']
+            angle = (-rotate_range + 2 * rotate_range * torch.rand(1)[0]).item()
             rgb_aug = TF.rotate(rgb_aug, angle)
             anno_aug = TF.rotate(anno_aug, angle, interpolation=TF.InterpolationMode.NEAREST)
             lidar_aug = TF.rotate(lidar_aug, angle)

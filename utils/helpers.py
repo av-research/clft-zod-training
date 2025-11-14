@@ -16,15 +16,6 @@ label_colors_list = [
         (0, 255, 0),      # 4: cyclist - green
         (255, 255, 0)]    # 5: pedestrian - cyan
 
-# all the classes that are present in the dataset
-ALL_CLASSES = ['background', 'vehicle', 'human', 'ignore']
-
-"""
-This (`class_values`) assigns a specific class label to each of the classes.
-For example, `vehicle=0`, `human=1`, and so on.
-"""
-class_values = [ALL_CLASSES.index(cls.lower()) for cls in ALL_CLASSES]
-
 
 def creat_dir(config):
     logdir = config['Log']['logdir']
@@ -60,22 +51,26 @@ def waymo_anno_class_relabel(annotation):
 def waymo_anno_class_relabel_1(annotation):
     """
     Reassign the indices of the objects in annotation(PointCloud);
+    Standardizes class indices to consistent mapping:
     :parameter annotation: 0->ignore, 1->vehicle, 2->pedestrian, 3->sign,
                             4->cyclist, 5->background
-    :return annotation: 0->background, 1-> cyclist 2->pedestrain, 3->sign,
-                            4->ignore+vehicle
+    :return annotation: 0->background, 1->vehicle, 2->pedestrian, 3->sign, 4->cyclist, 5->ignore
     """
     annotation = np.array(annotation)
 
-    mask_ignore = annotation == 0
-    mask_vehicle = annotation == 1
-    mask_cyclist = annotation == 4
-    mask_background = annotation == 5
-
-    annotation[mask_background] = 0
-    annotation[mask_cyclist] = 1
-    annotation[mask_ignore] = 4
-    annotation[mask_vehicle] = 4
+    # Create a mapping array to standardize class indices
+    # Original: 0->ignore, 1->vehicle, 2->pedestrian, 3->sign, 4->cyclist, 5->background
+    # Target: 0->background, 1->vehicle, 2->pedestrian, 3->sign, 4->cyclist, 5->ignore
+    
+    mapping = np.full(6, 5, dtype=int)  # Default to ignore
+    mapping[5] = 0  # background: 5 -> 0
+    mapping[1] = 1  # vehicle: 1 -> 1
+    mapping[2] = 2  # pedestrian: 2 -> 2
+    mapping[3] = 3  # sign: 3 -> 3
+    mapping[4] = 4  # cyclist: 4 -> 4
+    # ignore: 0 -> 5 (already set as default)
+    
+    annotation = mapping[annotation]
 
     return torch.from_numpy(annotation).unsqueeze(0).long() # [H,W]->[1,H,W]
 
@@ -100,25 +95,99 @@ def zod_anno_class_relabel(annotation):
     return torch.from_numpy(annotation).unsqueeze(0).long() # [H,W]->[1,H,W]
 
 
-def draw_test_segmentation_map(outputs):
+def relabel_annotation(annotation, config):
+    """
+    Relabel annotation based on configurable class indices from config.
+    
+    This allows for flexible class mapping, including merging classes by assigning
+    them the same index value. Creates consecutive indices starting from 0.
+    
+    Args:
+        annotation: numpy array or torch tensor with original class indices
+        config: configuration dictionary containing Dataset.classes with 'color' and 'index' fields
+        
+    Returns:
+        torch tensor with relabeled indices [1, H, W] using consecutive indices
+    """
+    annotation = np.array(annotation)
+    
+    classes = config['Dataset']['classes']
+    
+    # Create mapping from config index to consecutive training index
+    # This handles class merging when multiple classes share the same config index
+    config_index_to_training_index = {}
+    unique_config_indices = sorted(set(cls['training_index'] for cls in classes))
+    for training_index, config_index in enumerate(unique_config_indices):
+        config_index_to_training_index[config_index] = training_index
+    
+    # Create the final mapping from original annotation values to training indices
+    # Use a conservative size to handle all possible annotation values (ZOD uses 0-5)
+    max_original_value = max(6, max(c['original_index'] for c in classes) + 1)  # At least 6 for ZOD
+    original_to_training_mapping = np.full(max_original_value, 0, dtype=int)  # Default to 0 (background)
+    
+    for cls in classes:
+        original_annotation_value = cls['original_index']
+        config_index = cls['training_index']
+        training_index = config_index_to_training_index[config_index]
+        original_to_training_mapping[original_annotation_value] = training_index
+    
+    # Apply mapping
+    relabeled = original_to_training_mapping[annotation]
+    
+    return torch.from_numpy(relabeled).unsqueeze(0).long()  # [H,W]->[1,H,W]
+
+
+def draw_test_segmentation_map(outputs, config=None):
+    """
+    Create segmentation visualization with colors based on config class definitions.
+    
+    Args:
+        outputs: Model output tensor
+        config: Configuration dictionary with Dataset.classes. If None, uses hardcoded colors.
+    """
     labels = torch.argmax(outputs.squeeze(), dim=0).detach().cpu().numpy()
-    # labels = outputs.squeeze().detach().cpu().numpy()
+    
+    # Create color mapping based on config or use default
+    if config is not None:
+        classes = config['Dataset']['classes']
+        
+        # Create mapping from training index to color index (original_index)
+        training_to_color_index = {}
+        for cls in classes:
+            training_index = cls['training_index']
+            color_index = cls['original_index']
+            training_to_color_index[training_index] = color_index
+        
+        # Create color list for training indices
+        unique_training_indices = sorted(training_to_color_index.keys())
+        color_list = []
+        
+        for training_index in unique_training_indices:
+            color_index = training_to_color_index[training_index]
+            if color_index < len(label_colors_list):
+                color_list.append(label_colors_list[color_index])
+            else:
+                # Fallback color
+                color_list.append((255, 255, 255))  # white
+    else:
+        # Use default hardcoded colors
+        color_list = label_colors_list
+    
     red_map = np.zeros_like(labels).astype(np.uint8)
     green_map = np.zeros_like(labels).astype(np.uint8)
-    black_map = np.zeros_like(labels).astype(np.uint8)
+    blue_map = np.zeros_like(labels).astype(np.uint8)
 
-    for label_num in range(0, len(label_colors_list)):
-        if label_num in class_values:
-            idx = labels == label_num
-            red_map[idx] = np.array(label_colors_list)[label_num, 0]
-            green_map[idx] = np.array(label_colors_list)[label_num, 1]
-            black_map[idx] = np.array(label_colors_list)[label_num, 2]
+    for label_num in range(0, len(color_list)):
+        idx = labels == label_num
+        red_map[idx] = color_list[label_num][0]
+        green_map[idx] = color_list[label_num][1]
+        blue_map[idx] = color_list[label_num][2]
 
-    segmented_image = np.stack([red_map, green_map, black_map], axis=2)
+    segmented_image = np.stack([red_map, green_map, blue_map], axis=2)
     return segmented_image
 
 def image_overlay(image, segmented_image):
-    alpha = 0.6  # how much transparency to apply
+    alpha = 0.8  # how much transparency to apply - increased from 0.6
     beta = 1 - alpha  # alpha + beta should equal 1
     gamma = 0  # scalar added to each sum
     cv2.addWeighted(segmented_image, alpha, image, beta, gamma, image)
@@ -136,7 +205,15 @@ def get_model_path(config):
     def get_checkpoint_num(filepath):
         try:
             filename = os.path.basename(filepath)
-            num_str = filename.replace('checkpoint_', '').replace('.pth', '')
+            # Handle both old format (checkpoint_0.pth) and new format (epoch_0_uuid.pth)
+            if filename.startswith('checkpoint_'):
+                num_str = filename.replace('checkpoint_', '').replace('.pth', '')
+            elif filename.startswith('epoch_'):
+                # Extract epoch number from epoch_0_uuid.pth format
+                parts = filename.replace('epoch_', '').replace('.pth', '').split('_')
+                num_str = parts[0] if parts else '0'
+            else:
+                num_str = '0'
             return int(num_str)
         except:
             return 0
@@ -144,13 +221,17 @@ def get_model_path(config):
     latest_file = max(files, key=get_checkpoint_num)
     return latest_file
 
-def save_model_dict(config, epoch, model, optimizer):
+def save_model_dict(config, epoch, model, optimizer, epoch_uuid=None):
     creat_dir(config)
+    if epoch_uuid:
+        filename = f"epoch_{epoch}_{epoch_uuid}.pth"
+    else:
+        filename = f"checkpoint_{epoch}.pth"
     torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict()},
-        config['Log']['logdir']+'progress_save/'+f"checkpoint_{epoch}.pth"
+        config['Log']['logdir']+'progress_save/'+filename
     )
 
 def adjust_learning_rate(config, optimizer, epoch):
@@ -172,7 +253,7 @@ class EarlyStopping(object):
         self.early_stop_trigger = False
         self.count = 0
 
-    def __call__(self, valid_param, epoch, model, optimizer):
+    def __call__(self, valid_param, epoch, model, optimizer, epoch_uuid=None):
         if self.min_param is None:
             self.min_param = valid_param
         elif valid_param >= self.min_param:
@@ -181,14 +262,19 @@ class EarlyStopping(object):
             if self.count >= self.patience:
                 self.early_stop_trigger = True
                 print('Saving model for last epoch...')
-                save_model_dict(self.config, epoch, model, optimizer)
+                save_model_dict(self.config, epoch, model, optimizer, epoch_uuid)
                 print('Saving Model Complete')
                 print('Early Stopping Triggered!')
         else:
             print(f'Valid loss decreased from {self.min_param:.4f} ' + f'to {valid_param:.4f}')
             self.min_param = valid_param
-            save_model_dict(self.config, epoch, model, optimizer)
-            print('Saving Model...')
+            # Check if this epoch will also be saved as a regular checkpoint
+            save_epoch = self.config['General']['save_epoch']
+            if not (epoch == 0 or (epoch + 1) % save_epoch == 0):
+                save_model_dict(self.config, epoch, model, optimizer, epoch_uuid)
+                print('Saving Model...')
+            else:
+                print('Skipping early stopping save (regular checkpoint will be saved)')
             self.count = 0
 
 def create_config_snapshot():

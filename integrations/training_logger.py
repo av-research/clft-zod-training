@@ -40,6 +40,9 @@ def log_epoch_results(epoch, training_uuid, results, log_dir, learning_rate=None
         log_dir (str or Path): Directory to save the log files
         learning_rate (float, optional): Learning rate for this epoch
         epoch_time (float, optional): Time taken for this epoch in seconds
+    
+    Returns:
+        str: Path to the logged file
     """
     epoch_uuid = str(uuid.uuid4())
 
@@ -69,6 +72,8 @@ def log_epoch_results(epoch, training_uuid, results, log_dir, learning_rate=None
         json.dump(data, f, indent=2)
 
     print(f"Epoch {epoch} results logged to {filepath}")
+    
+    return str(filepath)
 
 
 def generate_training_uuid():

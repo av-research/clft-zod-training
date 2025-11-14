@@ -19,11 +19,7 @@ import torch
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 
-from utils.helpers import zod_anno_class_relabel
-from utils.helpers import waymo_anno_class_relabel_1
-from utils.lidar_process import open_lidar
-from utils.lidar_process import crop_pointcloud
-from utils.lidar_process import get_unresized_lid_img_val
+from utils.lidar_process import open_lidar, crop_pointcloud, get_unresized_lid_img_val
 from utils.data_augment import DataAugment
 
 
@@ -120,8 +116,8 @@ class Dataset(object):
             # waymo rgb and anno is in 480x320, lidar is in 1920x1280
             rgb = Image.open(cam_path).convert('RGB')
 
-            # Here there are two class relabel functions, go to /utils/helper.py for details.
-            anno = waymo_anno_class_relabel_1(Image.open(anno_path))  # Tensor [1, H, W]
+            # Raw Waymo annotations are already in the correct format for the config
+            anno = torch.from_numpy(np.array(Image.open(anno_path))).unsqueeze(0).long()
             points_set, camera_coord = open_lidar(lidar_path, w_ratio=4, h_ratio=4,
                                                   lidar_mean=self.config['Dataset']['transforms']['lidar_mean_waymo'],
                                                   lidar_std=self.config['Dataset']['transforms']['lidar_mean_waymo'])
@@ -134,8 +130,8 @@ class Dataset(object):
             # waymo rgb and anno is in 480x320, lidar is in 1920x1280
             rgb = Image.open(cam_path).convert('RGB')
 
-            # Here there are two class relabel functions, go to /utils/helper.py for details.
-            anno = zod_anno_class_relabel(Image.open(anno_path))  # Tensor [1, H, W]
+            # Raw ZOD annotations are already in the correct format for the config
+            anno = torch.from_numpy(np.array(Image.open(anno_path))).unsqueeze(0).long()
             points_set, camera_coord = open_lidar(lidar_path, w_ratio=4, h_ratio=4,
                                                 lidar_mean=self.config['Dataset']['transforms']['lidar_mean'],
                                                 lidar_std=self.config['Dataset']['transforms']['lidar_std'])

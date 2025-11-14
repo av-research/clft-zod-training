@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
 """
-This is the script to load the all input frames to feed to model path file to compute the qualitative overlay results.
-Currently, it only works for CLFT model paths and Waymo dataset. It loads the config.json file for important
-information, so you have to set the things like CLFT variants, model path, and other things in json file.
-If you want to see how it works for single input frame, you can refer the ipython notebook in
-ipython/make_qualitative_images.ipynb
-ONLY WORK FOR WAYMO DATASET
-
-updated on 29.09.2024.
-CLFCN is also working now. Remember to specify the clfcn model path in config.json
+This is the script to load input frames and visualize model predictions.
+Updated to work with ZOD dataset and configurable class indexing.
+Supports CLFT backbone.
 """
 import os
 import cv2
@@ -22,25 +16,19 @@ import torchvision.transforms.functional as TF
 
 import json
 from clft.clft import CLFT
-from clfcn.fusion_net import FusionNet
-from utils.helpers import waymo_anno_class_relabel_1
-from utils.lidar_process import open_lidar
-from utils.lidar_process import crop_pointcloud
-from utils.lidar_process import get_unresized_lid_img_val
-from tools.dataset import lidar_dilation
+from utils.helpers import relabel_annotation
 
 from utils.helpers import draw_test_segmentation_map, image_overlay
 
 
 class OpenInput(object):
-    def __init__(self, backbone, cam_mean, cam_std, lidar_mean, lidar_std, w_ratio, h_ratio):
+    def __init__(self, backbone, cam_mean, cam_std, lidar_mean, lidar_std, config):
         self.backbone = backbone
         self.cam_mean = cam_mean
         self.cam_std = cam_std
         self.lidar_mean = lidar_mean
         self.lidar_std = lidar_std
-        self.w_ratio = w_ratio
-        self.h_ratio = h_ratio
+        self.config = config
 
     def open_rgb(self, image_path):
         clft_rgb_normalize = transforms.Compose(
@@ -50,63 +38,43 @@ class OpenInput(object):
                     mean=self.cam_mean,
                     std=self.cam_std)])
 
-        clfcn_rgb_normalize = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize(mean=self.cam_mean, std=self.cam_std)])
-
         rgb = Image.open(image_path).convert('RGB')
-        # image = Image.open(
-        #       '/home/claude/Data/claude_iseauto/labeled/night_fair/rgb/sq14_000061.png').\
-        #         resize((480, 320)).convert('RGB')
-        w_orig, h_orig = rgb.size  # original image's w and h
-        delta = int(h_orig/2)
-        top_crop_rgb = TF.crop(rgb, delta, 0, h_orig-delta, w_orig)
-        if self.backbone == 'clft':
-            top_rgb_norm = clft_rgb_normalize(top_crop_rgb)
-        elif self.backbone == 'clfcn':
-            top_rgb_norm = clfcn_rgb_normalize(top_crop_rgb)
-        return top_rgb_norm
+        # Visual run now supports CLFT backbone only; always use CLFT preprocessing
+        rgb_norm = clft_rgb_normalize(rgb)
+        return rgb_norm
 
     def open_anno(self, anno_path):
-        clft_anno_resize = transforms.Resize((384, 384), interpolation=transforms.InterpolationMode.NEAREST)
+        # For ZOD dataset, annotations are already in PNG format with correct class indices
         anno = Image.open(anno_path)
-
-        anno = waymo_anno_class_relabel_1(anno)
-        # annotation = Image.open(
-        #       '/home/claude/Data/claude_iseauto/labeled/night_fair/annotation_rgb/sq14_000061.png').\
-        #          resize((480, 320), Image.BICUBIC).convert('F')
-        w_orig, h_orig = anno.size  # PIL tuple. (w, h)
-        delta = int(h_orig/2)
-        top_crop_anno = TF.crop(anno, delta, 0, h_orig - delta, w_orig)
+        anno = np.array(anno)
+        
+        # Apply relabeling based on config
+        anno = relabel_annotation(anno, self.config)
+        
+        # Convert to tensor and resize if needed
+        anno_tensor = torch.from_numpy(anno).float()
         if self.backbone == 'clft':
-            anno_resize = clft_anno_resize(top_crop_anno).squeeze(0)
-        return anno_resize
+            anno_tensor = transforms.Resize((384, 384), interpolation=transforms.InterpolationMode.NEAREST)(anno_tensor)
+        
+        return anno_tensor.squeeze(0)
 
     def open_lidar(self, lidar_path):
-        points_set, camera_coord = open_lidar(
-           lidar_path,
-            w_ratio=self.w_ratio,
-            h_ratio=self.h_ratio,
-            lidar_mean=self.lidar_mean,
-            lidar_std=self.lidar_std)
-
-        top_crop_points_set, top_crop_camera_coord, _ = crop_pointcloud(
-            points_set, camera_coord, 160, 0, 160, 480)
-        X, Y, Z = get_unresized_lid_img_val(160, 480,
-                                            top_crop_points_set,
-                                            top_crop_camera_coord)
-        X, Y, Z = lidar_dilation(X, Y, Z)
-
+        # For ZOD dataset, LiDAR is stored as PNG projection
+        lidar_pil = Image.open(lidar_path)
+        
+        # Convert to tensor and normalize
+        lidar_tensor = TF.to_tensor(lidar_pil)
+        
+        # Apply normalization (ZOD uses different normalization than Waymo)
+        lidar_tensor = transforms.Normalize(
+            mean=self.lidar_mean,
+            std=self.lidar_std
+        )(lidar_tensor)
+        
         if self.backbone == 'clft':
-            X = transforms.Resize((384, 384))(X)
-            Y = transforms.Resize((384, 384))(Y)
-            Z = transforms.Resize((384, 384))(Z)
-
-        X = TF.to_tensor(np.array(X))
-        Y = TF.to_tensor(np.array(Y))
-        Z = TF.to_tensor(np.array(Z))
-
-        lid_images = torch.cat((X, Y, Z), 0)
-        return lid_images
+            lidar_tensor = transforms.Resize((384, 384))(lidar_tensor)
+        
+        return lidar_tensor
 
 
 def get_model_second_input(rgb_tensor, lidar_tensor, modality):
@@ -134,27 +102,22 @@ def get_model_second_input(rgb_tensor, lidar_tensor, modality):
         return lidar_tensor
 
 
-def run(modality, backbone, config):
+def run(modality, backbone, config, config_name):
     device = torch.device(config['General']['device']
                           if torch.cuda.is_available() else "cpu")
+    
+    # Calculate number of unique classes after relabeling
+    unique_indices = set(cls['training_index'] for cls in config['Dataset']['classes'])
+    num_unique_classes = len(unique_indices)
+    
     open_input = OpenInput(backbone,
                            cam_mean=config['Dataset']['transforms']['image_mean'],
-                           cam_std=config['Dataset']['transforms']['image_mean'],
-                           lidar_mean=config['Dataset']['transforms']['lidar_mean_waymo'],
-                           lidar_std=config['Dataset']['transforms']['lidar_mean_waymo'],
-                           w_ratio=4,
-                           h_ratio=4)
+                           cam_std=config['Dataset']['transforms']['image_std'],
+                           lidar_mean=config['Dataset']['transforms']['lidar_mean'],
+                           lidar_std=config['Dataset']['transforms']['lidar_std'],
+                           config=config)
 
-    if backbone == 'clfcn':
-        model = FusionNet()
-        print(f'Using backbone {args.backbone}')
-        checkpoint = torch.load(config['General']['model_path'], map_location=device)
-
-        model.load_state_dict(checkpoint['model_state_dict'])
-        model.to(device)
-        model.eval()
-
-    elif backbone == 'clft':
+    if backbone == 'clft':
         resize = config['Dataset']['transforms']['resize']
         model = CLFT(
             RGB_tensor_size=(3, resize, resize),
@@ -165,11 +128,11 @@ def run(modality, backbone, config):
             read=config['CLFT']['read'],
             hooks=config['CLFT']['hooks'],
             reassemble_s=config['CLFT']['reassembles'],
-            nclasses=len(config['Dataset']['classes']),
+            nclasses=num_unique_classes,
             type=config['CLFT']['type'],
             model_timm=config['CLFT']['model_timm'],
             )
-        print(f'Using backbone {args.backbone}')
+        print(f'Using backbone {backbone}')
 
         model_path = config['General']['model_path']
         model.load_state_dict(torch.load(model_path, map_location=device)['model_state_dict'])
@@ -177,18 +140,34 @@ def run(modality, backbone, config):
         model.eval()
 
     else:
-        sys.exit("A backbone must be specified! (clft or clfcn)")
+        sys.exit("A backbone must be specified! (clft)")
 
-    data_list = open(args.path, 'r')
-    data_cam = np.array(data_list.read().splitlines())
-    data_list.close()
+    # Check if path is a single image file or a text file with multiple paths
+    if args.path.endswith(('.png', '.jpg', '.jpeg')):
+        # Single image path
+        data_cam = [args.path]
+    else:
+        # Text file with multiple paths
+        data_list = open(args.path, 'r')
+        data_cam = np.array(data_list.read().splitlines())
+        data_list.close()
 
     i = 1
-    dataroot = './waymo_dataset/'
+    dataroot = config['Dataset']['dataset_root']
     for path in data_cam:
+        # ZOD dataset structure
         cam_path = os.path.join(dataroot, path)
-        anno_path = cam_path.replace('/camera', '/annotation')
-        lidar_path = cam_path.replace('/camera', '/lidar').replace('.png', '.pkl')
+        
+        # Determine annotation path based on modality
+        if modality == 'rgb':
+            anno_path = cam_path.replace('/camera', '/annotation_camera_only')
+        elif modality == 'lidar':
+            anno_path = cam_path.replace('/camera', '/annotation_lidar_only')
+        else:  # cross_fusion
+            anno_path = cam_path.replace('/camera', '/annotation_fusion')
+        
+        # LiDAR PNG path
+        lidar_path = cam_path.replace('/camera', '/lidar_png')
 
         rgb_name = cam_path.split('/')[-1].split('.')[0]
         anno_name = anno_path.split('/')[-1].split('.')[0]
@@ -205,67 +184,104 @@ def run(modality, backbone, config):
             with torch.no_grad():
                 second_input = get_model_second_input(rgb, lidar, modality)
                 _, output_seg = model(rgb, second_input, modality)
-                segmented_image = draw_test_segmentation_map(output_seg)
-                seg_resize = cv2.resize(segmented_image, (480, 160))
+                segmented_image = draw_test_segmentation_map(output_seg, configs)
+                
+                # Resize to original image dimensions for overlay
+                rgb_cv2 = cv2.imread(cam_path)
+                h, w = rgb_cv2.shape[:2]
+                seg_resize = cv2.resize(segmented_image, (w, h), interpolation=cv2.INTER_NEAREST)
+                
+                # Convert RGB to BGR for OpenCV
+                seg_resize_bgr = cv2.cvtColor(seg_resize, cv2.COLOR_RGB2BGR)
 
-                seg_path = cam_path.replace('waymo_dataset/labeled', 'output/clft_seg_results/segment')
-                overlay_path = cam_path.replace('waymo_dataset/labeled', 'output/clft_seg_results/overlay')
+                seg_path = cam_path.replace(dataroot, f'output/zod/{config_name}/segment')
+                overlay_path = cam_path.replace(dataroot, f'output/zod/{config_name}/overlay')
+
+                # Create output directories if they don't exist
+                os.makedirs(os.path.dirname(seg_path), exist_ok=True)
+                os.makedirs(os.path.dirname(overlay_path), exist_ok=True)
 
                 print(f'saving segment result {i}...')
-                cv2.imwrite(seg_path, seg_resize)
+                cv2.imwrite(seg_path, seg_resize_bgr)
 
-                rgb_cv2 = cv2.imread(cam_path)
-                rgb_cv2_top = rgb_cv2[160:320, 0:480]
-
-                overlay = image_overlay(rgb_cv2_top, seg_resize)
+                overlay = image_overlay(rgb_cv2, seg_resize_bgr)
                 print(f'saving overlay result {i}...')
                 cv2.imwrite(overlay_path, overlay)
 
-        elif backbone == 'clfcn':
-            with torch.no_grad():
-                second_input = get_model_second_input(rgb, lidar, modality)
-                output_seg = model(rgb, second_input, modality)
-                output_seg = output_seg[modality]
-                segmented_image = draw_test_segmentation_map(output_seg)
+                # Create comparison image (green=correct, red=incorrect)
+                # Load ground truth annotation
+                gt_anno = cv2.imread(anno_path, cv2.IMREAD_GRAYSCALE)
+                if gt_anno is None:
+                    print(f'Warning: Could not load ground truth annotation for {anno_path}')
+                else:
+                    # Resize ground truth to match prediction dimensions
+                    gt_anno_resized = cv2.resize(gt_anno, (w, h), interpolation=cv2.INTER_NEAREST)
+                    
+                    # Apply relabeling to ground truth to match training indices
+                    gt_anno_tensor = torch.from_numpy(gt_anno_resized).unsqueeze(0).long()
+                    gt_relabeled = relabel_annotation(gt_anno_tensor, configs)
+                    gt_relabeled = gt_relabeled.squeeze(0).squeeze(0).numpy()
+                    
+                    # Get prediction labels
+                    pred_labels = torch.argmax(output_seg.squeeze(), dim=0).detach().cpu().numpy()
+                    
+                    # Resize prediction to match ground truth dimensions
+                    pred_labels = cv2.resize(pred_labels.astype(np.float32), (w, h), interpolation=cv2.INTER_NEAREST).astype(np.uint8)
+                    
+                    # Create comparison image
+                    comparison = np.zeros((h, w, 3), dtype=np.uint8)
+                    
+                    # Green for correct predictions, red for incorrect
+                    correct_mask = (pred_labels == gt_relabeled)
+                    incorrect_mask = (pred_labels != gt_relabeled)
+                    
+                    comparison[correct_mask] = [0, 255, 0]    # Green for correct
+                    comparison[incorrect_mask] = [0, 0, 255]  # Red for incorrect
+                    
+                    # Save comparison image
+                    compare_path = cam_path.replace(dataroot, f'output/zod/{config_name}/compare')
+                    os.makedirs(os.path.dirname(compare_path), exist_ok=True)
+                    print(f'saving comparison result {i}...')
+                    cv2.imwrite(compare_path, comparison)
 
-                seg_path = cam_path.replace('waymo_dataset/labeled', 'output/clfcn_seg_results/segment')
-                overlay_path = cam_path.replace('waymo_dataset/labeled', 'output/clfcn_seg_results/overlay')
+                    # Create correct_only image (only correct predictions visible)
+                    correct_only = seg_resize.copy()
+                    correct_only[incorrect_mask] = [0, 0, 0]  # Black out incorrect predictions
+                    
+                    correct_only_path = cam_path.replace(dataroot, f'output/zod/{config_name}/correct_only')
+                    os.makedirs(os.path.dirname(correct_only_path), exist_ok=True)
+                    correct_only_bgr = cv2.cvtColor(correct_only, cv2.COLOR_RGB2BGR)
+                    print(f'saving correct_only result {i}...')
+                    cv2.imwrite(correct_only_path, correct_only_bgr)
 
-                print(f'saving segment result {i}...')
-                cv2.imwrite(seg_path, segmented_image)
-
-                rgb_cv2 = cv2.imread(cam_path)
-                rgb_cv2_top = rgb_cv2[160:320, 0:480]
-                overlay = image_overlay(rgb_cv2_top, segmented_image)
-                print(f'saving overlay result {i}...')
-                cv2.imwrite(overlay_path, overlay)
+        # Only CLFT backbone is supported in this visual run script.
 
         else:
-            sys.exit("A backbone must be specified! (clft or clfcn)")
+            sys.exit("A backbone must be specified! (clft)")
         i += 1
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='visual run script')
-    parser.add_argument('-m', '--mode', type=str, required=True,
-                        choices=['rgb', 'lidar', 'cross_fusion'],
-                        help='Output mode (lidar, rgb or cross_fusion)')
-    parser.add_argument('-bb', '--backbone', required=True,
-                        choices=['clfcn', 'clft'],
-                        help='Use the backbone of training, clft or clfcn')
-    parser.add_argument('-p', '--path', type=str, required=True,
-                        help='The path of the text file to visualize')
-    parser.add_argument('-c', '--config', type=str, default='config.json',
-                        help='Path to config file (default: config.json)')
-    parser.add_argument('--model_path', type=str,
-                        help='Path to model checkpoint (overrides config)')
+    parser.add_argument('-p', '--path', type=str, required=False, default='zod_dataset/visualize.txt',
+                        help='Path to image file (e.g., camera/frame_099988.png) or text file containing image paths (default: zod_dataset/visualize.txt)')
+    parser.add_argument('-c', '--config', type=str, default='config/zod/config_4.json',
+                        help='Path to config file (default: config/zod/config_4.json)')
+    parser.add_argument('--model_path', type=str, default='logs/zod/config_4/progress_save/epoch_99_109a9b6a-402b-4759-b762-0f3c8a5425a7.pth',
+                        help='Path to model checkpoint')
     args = parser.parse_args()
 
     with open(args.config, 'r') as f:
         configs = json.load(f)
 
-    # Override model path if provided
-    if args.model_path:
-        configs['General']['model_path'] = args.model_path
+    # Extract config name from path (e.g., 'config_1' from 'config/zod/config_1.json')
+    config_name = os.path.splitext(os.path.basename(args.config))[0]
 
-    run(args.mode, args.backbone, configs)
+    # Set model path
+    configs['General']['model_path'] = args.model_path
+
+    # Always use CLFT backbone and read mode from config
+    backbone = 'clft'
+    mode = configs['CLI']['mode']
+
+    run(mode, backbone, configs, config_name)
