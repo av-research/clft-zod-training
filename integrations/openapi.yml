@@ -11,6 +11,24 @@ servers:
   - url: https://vision-api.tumbaland.eu/api
     description: Production server
 
+tags:
+  - name: Analysis
+    description: Dataset analysis data management
+  - name: Dataset Images
+    description: Dataset image management and storage
+  - name: Datasets
+    description: Dataset metadata management
+  - name: Trainings
+    description: Training run management
+  - name: Epochs
+    description: Training epoch data management
+  - name: Configurations
+    description: Training configuration management
+  - name: Comments
+    description: Training comments and feedback
+  - name: Test Results
+    description: Model testing and evaluation results
+
 components:
   schemas:
     Error:
@@ -181,34 +199,58 @@ components:
         uuid:
           type: string
           example: "training-uuid-123"
+        training_uuid:
+          type: string
+          description: "Alternative UUID field name"
+          example: "training-uuid-123"
         name:
           type: string
           example: "YOLOv5 Training Run"
         description:
           type: string
           example: "Training YOLOv5 on Waymo dataset"
-        model:
+        datasetId:
           type: string
-          example: "yolov5"
-        dataset:
+          example: "507f1f77bcf86cd799439011"
+        configId:
           type: string
-          example: "waymo"
+          example: "507f1f77bcf86cd799439012"
         status:
           type: string
           enum: ["pending", "running", "completed", "failed"]
           example: "completed"
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["yolov5", "waymo", "experiment"]
         startTime:
           type: string
           format: date-time
         endTime:
           type: string
           format: date-time
-        metrics:
-          type: object
-          description: "Training metrics"
         metadata:
           type: object
           description: "Additional metadata"
+        metrics:
+          type: object
+          properties:
+            totalTime:
+              type: number
+              example: 3600
+            epochCount:
+              type: number
+              example: 100
+            cpuCost:
+              type: number
+              example: 10.50
+            gpuCost:
+              type: number
+              example: 25.75
+            totalCost:
+              type: number
+              example: 36.25
         createdAt:
           type: string
           format: date-time
@@ -218,8 +260,6 @@ components:
       required:
         - uuid
         - name
-        - model
-        - dataset
         - status
 
     Epoch:
@@ -228,33 +268,46 @@ components:
         _id:
           type: string
           example: "507f1f77bcf86cd799439011"
-        uuid:
-          type: string
-          example: "epoch-uuid-123"
         trainingId:
           type: string
           example: "507f1f77bcf86cd799439011"
+        training_uuid:
+          type: string
+          example: "training-uuid-123"
+        epoch_uuid:
+          type: string
+          example: "epoch-uuid-123"
         epoch:
           type: integer
           example: 10
-        metrics:
+        timestamp:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00.000Z"
+        results:
           type: object
-          description: "Epoch metrics"
-        loss:
-          type: number
-          example: 0.123
-        accuracy:
-          type: number
-          example: 0.95
-        validation_loss:
-          type: number
-          example: 0.145
-        validation_accuracy:
-          type: number
-          example: 0.92
+          description: "Epoch training results with metrics per phase and class"
+          example:
+            train:
+              loss: 0.123
+              mean_iou: 0.85
+              vehicle:
+                iou: 0.90
+                precision: 0.92
+                recall: 0.88
+            val:
+              loss: 0.145
+              mean_iou: 0.82
+              vehicle:
+                iou: 0.87
+                precision: 0.89
+                recall: 0.85
         learning_rate:
           type: number
           example: 0.001
+        epoch_time:
+          type: number
+          example: 120.5
         metadata:
           type: object
           description: "Additional metadata"
@@ -266,7 +319,10 @@ components:
           format: date-time
       required:
         - trainingId
+        - training_uuid
+        - epoch_uuid
         - epoch
+        - results
 
     Config:
       type: object
@@ -274,18 +330,26 @@ components:
         _id:
           type: string
           example: "507f1f77bcf86cd799439011"
-        uuid:
+        config_uuid:
           type: string
           example: "config-uuid-123"
-        trainingId:
+        summary:
           type: string
-          example: "507f1f77bcf86cd799439011"
-        name:
-          type: string
-          example: "YOLOv5 Config"
-        config:
+          example: "YOLOv5 configuration for Waymo dataset"
+        config_data:
           type: object
-          description: "Configuration data"
+          description: "Configuration data (JSON structure)"
+          example:
+            model:
+              type: "yolov5"
+              size: "large"
+            training:
+              epochs: 100
+              batch_size: 16
+              learning_rate: 0.001
+        config_name:
+          type: string
+          example: "YOLOv5 Large Config"
         metadata:
           type: object
           description: "Additional metadata"
@@ -296,9 +360,9 @@ components:
           type: string
           format: date-time
       required:
-        - trainingId
-        - name
-        - config
+        - config_uuid
+        - summary
+        - config_data
 
     Comment:
       type: object
@@ -719,6 +783,8 @@ paths:
   # Dataset Analysis Endpoints
   /analysis/upload:
     post:
+      tags:
+        - Analysis
       summary: Upload analysis JSON data
       description: Upload analysis data for a dataset (creates new analysis if dataset doesn't exist)
       requestBody:
@@ -759,6 +825,8 @@ paths:
 
   /analysis:
     get:
+      tags:
+        - Analysis
       summary: Get all analyses
       description: Retrieve all dataset analyses with optional filtering and pagination
       parameters:
@@ -795,6 +863,8 @@ paths:
 
   /analysis/dataset/{name}:
     get:
+      tags:
+        - Analysis
       summary: Get analyses by dataset name
       description: Retrieve all analyses for a specific dataset
       parameters:
@@ -832,6 +902,8 @@ paths:
 
   /analysis/{id}:
     get:
+      tags:
+        - Analysis
       summary: Get analysis by ID
       description: Retrieve a specific analysis by its ID
       parameters:
@@ -862,6 +934,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     put:
+      tags:
+        - Analysis
       summary: Update analysis
       description: Update an existing analysis
       parameters:
@@ -908,6 +982,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     delete:
+      tags:
+        - Analysis
       summary: Delete analysis
       description: Delete an analysis by ID
       parameters:
@@ -939,6 +1015,8 @@ paths:
 
   /analysis/compare:
     post:
+      tags:
+        - Analysis
       summary: Compare multiple analyses
       description: Compare data from multiple analyses
       requestBody:
@@ -970,6 +1048,8 @@ paths:
   # Dataset Image Endpoints
   /dataset-images/dataset/{datasetId}:
     get:
+      tags:
+        - Dataset Images
       summary: Get images by dataset
       description: Retrieve all images for a specific dataset with pagination and search
       parameters:
@@ -1011,6 +1091,8 @@ paths:
 
   /dataset-images/{id}:
     get:
+      tags:
+        - Dataset Images
       summary: Get image by ID
       description: Retrieve a specific dataset image by ID
       parameters:
@@ -1041,6 +1123,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     put:
+      tags:
+        - Dataset Images
       summary: Update image
       description: Update image metadata
       parameters:
@@ -1077,6 +1161,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     delete:
+      tags:
+        - Dataset Images
       summary: Delete image
       description: Delete an image and its files from storage
       parameters:
@@ -1108,6 +1194,8 @@ paths:
 
   /dataset-images:
     post:
+      tags:
+        - Dataset Images
       summary: Create dataset image
       description: Create a new dataset image record
       requestBody:
@@ -1144,6 +1232,8 @@ paths:
 
   /dataset-images/upload-url:
     post:
+      tags:
+        - Dataset Images
       summary: Get upload signed URL
       description: Generate a signed URL for direct client upload to MinIO
       requestBody:
@@ -1175,6 +1265,8 @@ paths:
   # Dataset Endpoints
   /datasets:
     get:
+      tags:
+        - Datasets
       summary: Get all datasets
       description: Retrieve all datasets with pagination
       parameters:
@@ -1210,6 +1302,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     post:
+      tags:
+        - Datasets
       summary: Create dataset
       description: Create a new dataset
       requestBody:
@@ -1268,6 +1362,8 @@ paths:
 
   /datasets/{id}:
     get:
+      tags:
+        - Datasets
       summary: Get dataset by ID
       description: Retrieve a specific dataset by ID
       parameters:
@@ -1298,6 +1394,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     put:
+      tags:
+        - Datasets
       summary: Update dataset
       description: Update an existing dataset
       parameters:
@@ -1351,6 +1449,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     delete:
+      tags:
+        - Datasets
       summary: Delete dataset
       description: Delete a dataset by ID
       parameters:
@@ -1382,6 +1482,8 @@ paths:
 
   /datasets/uuid/{uuid}:
     get:
+      tags:
+        - Datasets
       summary: Get dataset by UUID
       description: Retrieve a specific dataset by UUID
       parameters:
@@ -1414,6 +1516,8 @@ paths:
   # Training Endpoints
   /trainings:
     get:
+      tags:
+        - Trainings
       summary: Get all trainings
       description: Retrieve all training runs with pagination and filtering
       parameters:
@@ -1465,6 +1569,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     post:
+      tags:
+        - Trainings
       summary: Create training
       description: Create a new training run
       requestBody:
@@ -1483,31 +1589,32 @@ paths:
                 description:
                   type: string
                   example: "Training YOLOv5 on Waymo dataset"
-                model:
+                datasetId:
                   type: string
-                  example: "yolov5"
-                dataset:
+                  example: "507f1f77bcf86cd799439011"
+                configId:
                   type: string
-                  example: "waymo"
+                  example: "507f1f77bcf86cd799439012"
                 status:
                   type: string
                   enum: ["pending", "running", "completed", "failed"]
                   default: "pending"
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  example: ["yolov5", "waymo", "experiment"]
                 startTime:
                   type: string
                   format: date-time
                 endTime:
                   type: string
                   format: date-time
-                metrics:
-                  type: object
                 metadata:
                   type: object
               required:
                 - uuid
                 - name
-                - model
-                - dataset
       responses:
         '201':
           description: Training created successfully
@@ -1530,6 +1637,8 @@ paths:
 
   /trainings/{id}:
     get:
+      tags:
+        - Trainings
       summary: Get training by ID
       description: Retrieve a specific training run by ID
       parameters:
@@ -1560,6 +1669,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     put:
+      tags:
+        - Trainings
       summary: Update training
       description: Update an existing training run
       parameters:
@@ -1582,17 +1693,26 @@ paths:
                 description:
                   type: string
                   example: "Updated description"
+                datasetId:
+                  type: string
+                  example: "507f1f77bcf86cd799439011"
+                configId:
+                  type: string
+                  example: "507f1f77bcf86cd799439012"
                 status:
                   type: string
                   enum: ["pending", "running", "completed", "failed"]
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  example: ["updated", "experiment"]
                 startTime:
                   type: string
                   format: date-time
                 endTime:
                   type: string
                   format: date-time
-                metrics:
-                  type: object
                 metadata:
                   type: object
       responses:
@@ -1616,6 +1736,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     delete:
+      tags:
+        - Trainings
       summary: Delete training
       description: Delete a training run by ID
       parameters:
@@ -1647,6 +1769,8 @@ paths:
 
   /trainings/uuid/{uuid}:
     get:
+      tags:
+        - Trainings
       summary: Get training by UUID
       description: Retrieve a specific training run by UUID
       parameters:
@@ -1678,6 +1802,8 @@ paths:
 
   /trainings/{id}/epochs:
     get:
+      tags:
+        - Trainings
       summary: Get training with epochs
       description: Retrieve a training run with all its epochs
       parameters:
@@ -1709,6 +1835,8 @@ paths:
 
   /trainings/stats:
     get:
+      tags:
+        - Trainings
       summary: Get training statistics
       description: Retrieve aggregated statistics for all training runs
       responses:
@@ -1727,6 +1855,8 @@ paths:
 
   /trainings/compare:
     post:
+      tags:
+        - Trainings
       summary: Compare trainings
       description: Compare multiple training runs
       requestBody:
@@ -1766,6 +1896,8 @@ paths:
   # Epoch Endpoints
   /epochs/training/{trainingId}:
     get:
+      tags:
+        - Epochs
       summary: Get epochs by training
       description: Retrieve all epochs for a specific training run
       parameters:
@@ -1803,6 +1935,8 @@ paths:
 
   /epochs/{id}:
     get:
+      tags:
+        - Epochs
       summary: Get epoch by ID
       description: Retrieve a specific epoch by ID
       parameters:
@@ -1833,6 +1967,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     put:
+      tags:
+        - Epochs
       summary: Update epoch
       description: Update an existing epoch
       parameters:
@@ -1889,6 +2025,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     delete:
+      tags:
+        - Epochs
       summary: Delete epoch
       description: Delete an epoch by ID
       parameters:
@@ -1920,6 +2058,8 @@ paths:
 
   /epochs/uuid/{uuid}:
     get:
+      tags:
+        - Epochs
       summary: Get epoch by UUID
       description: Retrieve a specific epoch by UUID
       parameters:
@@ -1951,6 +2091,8 @@ paths:
 
   /epochs:
     post:
+      tags:
+        - Epochs
       summary: Create epoch
       description: Create a new epoch
       requestBody:
@@ -1960,37 +2102,46 @@ paths:
             schema:
               type: object
               properties:
-                uuid:
-                  type: string
-                  example: "epoch-uuid-123"
                 trainingId:
                   type: string
                   example: "507f1f77bcf86cd799439011"
+                training_uuid:
+                  type: string
+                  example: "training-uuid-123"
+                epoch_uuid:
+                  type: string
+                  example: "epoch-uuid-123"
                 epoch:
                   type: integer
                   example: 10
-                metrics:
+                timestamp:
+                  type: string
+                  format: date-time
+                  example: "2023-01-01T00:00:00.000Z"
+                results:
                   type: object
-                loss:
-                  type: number
-                  example: 0.123
-                accuracy:
-                  type: number
-                  example: 0.95
-                validation_loss:
-                  type: number
-                  example: 0.145
-                validation_accuracy:
-                  type: number
-                  example: 0.92
+                  description: "Epoch training results"
+                  example:
+                    train:
+                      loss: 0.123
+                      mean_iou: 0.85
+                    val:
+                      loss: 0.145
+                      mean_iou: 0.82
                 learning_rate:
                   type: number
                   example: 0.001
+                epoch_time:
+                  type: number
+                  example: 120.5
                 metadata:
                   type: object
               required:
                 - trainingId
+                - training_uuid
+                - epoch_uuid
                 - epoch
+                - results
       responses:
         '201':
           description: Epoch created successfully
@@ -2013,6 +2164,8 @@ paths:
 
   /epochs/upload:
     post:
+      tags:
+        - Epochs
       summary: Create epoch from JSON
       description: Upload epoch data from JSON file
       requestBody:
@@ -2044,6 +2197,8 @@ paths:
 
   /epochs/batch:
     post:
+      tags:
+        - Epochs
       summary: Create epochs batch
       description: Create multiple epochs at once
       requestBody:
@@ -2106,6 +2261,8 @@ paths:
   # Config Endpoints
   /configs:
     get:
+      tags:
+        - Configurations
       summary: Get all configs
       description: Retrieve all configurations with pagination
       parameters:
@@ -2141,6 +2298,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     post:
+      tags:
+        - Configurations
       summary: Create config
       description: Create a new configuration
       requestBody:
@@ -2150,24 +2309,31 @@ paths:
             schema:
               type: object
               properties:
-                uuid:
+                config_uuid:
                   type: string
                   example: "config-uuid-123"
-                trainingId:
+                summary:
                   type: string
-                  example: "507f1f77bcf86cd799439011"
-                name:
-                  type: string
-                  example: "YOLOv5 Config"
-                config:
+                  example: "YOLOv5 configuration for Waymo dataset"
+                config_data:
                   type: object
                   description: "Configuration data"
+                  example:
+                    model:
+                      type: "yolov5"
+                      size: "large"
+                    training:
+                      epochs: 100
+                      batch_size: 16
+                config_name:
+                  type: string
+                  example: "YOLOv5 Large Config"
                 metadata:
                   type: object
               required:
-                - trainingId
-                - name
-                - config
+                - config_uuid
+                - summary
+                - config_data
       responses:
         '201':
           description: Config created successfully
@@ -2190,6 +2356,8 @@ paths:
 
   /configs/training/{trainingId}:
     get:
+      tags:
+        - Configurations
       summary: Get configs by training
       description: Retrieve all configurations for a specific training run
       parameters:
@@ -2227,6 +2395,8 @@ paths:
 
   /configs/{id}:
     get:
+      tags:
+        - Configurations
       summary: Get config by ID
       description: Retrieve a specific configuration by ID
       parameters:
@@ -2257,6 +2427,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     put:
+      tags:
+        - Configurations
       summary: Update config
       description: Update an existing configuration
       parameters:
@@ -2302,6 +2474,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     delete:
+      tags:
+        - Configurations
       summary: Delete config
       description: Delete a configuration by ID
       parameters:
@@ -2333,6 +2507,8 @@ paths:
 
   /configs/uuid/{uuid}:
     get:
+      tags:
+        - Configurations
       summary: Get config by UUID
       description: Retrieve a specific configuration by UUID
       parameters:
@@ -2364,6 +2540,8 @@ paths:
 
   /configs/upload:
     post:
+      tags:
+        - Configurations
       summary: Create config from JSON
       description: Upload configuration data from JSON file
       requestBody:
@@ -2395,6 +2573,8 @@ paths:
 
   /configs/batch:
     post:
+      tags:
+        - Configurations
       summary: Create configs batch
       description: Create multiple configurations at once
       requestBody:
@@ -2448,6 +2628,8 @@ paths:
   # Comment Endpoints
   /comments/training/{trainingId}:
     get:
+      tags:
+        - Comments
       summary: Get comments by training
       description: Retrieve all comments for a specific training run
       parameters:
@@ -2485,6 +2667,8 @@ paths:
 
   /comments:
     post:
+      tags:
+        - Comments
       summary: Create comment
       description: Create a new comment
       requestBody:
@@ -2534,6 +2718,8 @@ paths:
 
   /comments/{id}:
     put:
+      tags:
+        - Comments
       summary: Update comment
       description: Update an existing comment
       parameters:
@@ -2576,6 +2762,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     delete:
+      tags:
+        - Comments
       summary: Delete comment
       description: Delete a comment by ID
       parameters:
@@ -2608,8 +2796,10 @@ paths:
   # Test Result Endpoints
   /test-results:
     get:
+      tags:
+        - Test Results
       summary: Get all test results
-      description: Retrieve all test results with optional pagination, filtering, and sorting
+      description: Retrieve all test results with optional pagination, filtering, and sorting. Supports filtering by training UUID (efficient for getting all test results for a training) or by specific epoch UUIDs.
       parameters:
         - name: page
           in: query
@@ -2641,6 +2831,16 @@ paths:
           schema:
             type: integer
           description: Filter by epoch number
+        - name: epoch_uuids
+          in: query
+          schema:
+            type: string
+          description: Filter by comma-separated epoch UUIDs
+        - name: training_uuid
+          in: query
+          schema:
+            type: string
+          description: Filter by training UUID (returns all test results for all epochs of the specified training)
       responses:
         '200':
           description: Test results retrieved successfully
@@ -2656,6 +2856,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     post:
+      tags:
+        - Test Results
       summary: Create test result
       description: Create a new test result
       requestBody:
@@ -2692,6 +2894,8 @@ paths:
 
   /test-results/upload:
     post:
+      tags:
+        - Test Results
       summary: Create test result from JSON
       description: Upload test result data from JSON file (accepts the full JSON structure)
       requestBody:
@@ -2729,6 +2933,8 @@ paths:
 
   /test-results/epochs:
     get:
+      tags:
+        - Test Results
       summary: Get test result epochs
       description: Retrieve all unique epoch numbers that have test results
       responses:
@@ -2747,6 +2953,8 @@ paths:
 
   /test-results/{id}:
     get:
+      tags:
+        - Test Results
       summary: Get test result by ID
       description: Retrieve a specific test result by its ID
       parameters:
@@ -2777,6 +2985,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     put:
+      tags:
+        - Test Results
       summary: Update test result
       description: Update an existing test result
       parameters:
@@ -2813,6 +3023,8 @@ paths:
                 $ref: '#/components/schemas/Error'
 
     delete:
+      tags:
+        - Test Results
       summary: Delete test result
       description: Delete a test result by ID
       parameters:
@@ -2844,6 +3056,8 @@ paths:
 
   /test-results/test/{testUuid}:
     get:
+      tags:
+        - Test Results
       summary: Get test result by test UUID
       description: Retrieve a specific test result by its test UUID
       parameters:
@@ -2875,6 +3089,8 @@ paths:
 
   /test-results/epoch/{epochUuid}:
     get:
+      tags:
+        - Test Results
       summary: Get test results by epoch UUID
       description: Retrieve all test results for a specific epoch UUID
       parameters:

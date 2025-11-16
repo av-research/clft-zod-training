@@ -169,6 +169,29 @@ def draw_test_segmentation_map(outputs, config=None):
             else:
                 # Fallback color
                 color_list.append((255, 255, 255))  # white
+        
+        # Dataset-specific color adjustments
+        if config.get('Dataset', {}).get('name') == 'waymo':
+            # For Waymo, set background to black, vehicle to red, cyclist + pedestrian to yellow
+            bg_training_index = None
+            vehicle_training_index = None
+            cyclist_ped_training_index = None
+            for cls in config['Dataset']['classes']:
+                if cls['name'] == 'background':
+                    bg_training_index = cls['training_index']
+                elif cls['name'] == 'vehicle':
+                    vehicle_training_index = cls['training_index']
+                elif cls['name'] == 'cyclist + pedestrian':
+                    cyclist_ped_training_index = cls['training_index']
+            if bg_training_index is not None and bg_training_index in unique_training_indices:
+                bg_idx = unique_training_indices.index(bg_training_index)
+                color_list[bg_idx] = (0, 0, 0)
+            if vehicle_training_index is not None and vehicle_training_index in unique_training_indices:
+                veh_idx = unique_training_indices.index(vehicle_training_index)
+                color_list[veh_idx] = (255, 0, 0)
+            if cyclist_ped_training_index is not None and cyclist_ped_training_index in unique_training_indices:
+                cp_idx = unique_training_indices.index(cyclist_ped_training_index)
+                color_list[cp_idx] = (255, 255, 0)
     else:
         # Use default hardcoded colors
         color_list = label_colors_list
@@ -187,11 +210,22 @@ def draw_test_segmentation_map(outputs, config=None):
     return segmented_image
 
 def image_overlay(image, segmented_image):
-    alpha = 0.8  # how much transparency to apply - increased from 0.6
-    beta = 1 - alpha  # alpha + beta should equal 1
-    gamma = 0  # scalar added to each sum
-    cv2.addWeighted(segmented_image, alpha, image, beta, gamma, image)
-    return image
+    """
+    Create overlay with transparent masks on original image.
+    Only predicted classes are shown with transparency, background remains original.
+    """
+    # Create a copy of the original image
+    overlay = image.copy().astype(np.float32)
+
+    # Find non-black and non-background pixels in segmented image (predicted classes)
+    # Background (class 5 for Waymo) is cyan (255,255,0), ignore (class 0) is black (0,0,0)
+    mask = np.any(segmented_image != [0, 0, 0], axis=2) & np.any(segmented_image != [255, 255, 0], axis=2)
+
+    # Apply alpha blending only to predicted regions
+    alpha = 0.6  # transparency level
+    overlay[mask] = alpha * segmented_image[mask].astype(np.float32) + (1 - alpha) * overlay[mask]
+
+    return overlay.astype(np.uint8)
 
 def get_model_path(config):
     model_path = config['General']['model_path']

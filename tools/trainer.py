@@ -36,7 +36,6 @@ class Trainer(object):
         self.vision_training_id = None
         self.vision_config_id = None
         if self.training_uuid:
-            training_name = f"{config['Dataset']['name']} - {config['CLI']['backbone']}"
             model_name = config['CLI']['backbone']
             dataset_name = config['Dataset']['name']
             description = config.get('Summary', f"Training {model_name} on {dataset_name} dataset")
@@ -55,10 +54,10 @@ class Trainer(object):
                 # Then create training with config ID
                 self.vision_training_id = create_training(
                     uuid=self.training_uuid,
-                    name=training_name,
+                    name=description,
                     model=model_name,
                     dataset=dataset_name,
-                    description=description,
+                    description='',
                     tags=tags,
                     config_id=self.vision_config_id
                 )
@@ -192,28 +191,33 @@ class Trainer(object):
         else:
             print('Training from the beginning')
 
-    def compute_epoch_metrics(self, total_loss, num_batches):
+    def compute_epoch_metrics(self, total_loss, num_batches, overlap_cum, union_cum, pred_cum, label_cum):
         """
         Compute final metrics for an epoch.
 
         Args:
             total_loss: Sum of losses across all batches
             num_batches: Number of batches processed
-            modal: Training mode
-            dataloader: DataLoader
+            overlap_cum: Accumulated overlaps
+            union_cum: Accumulated unions
+            pred_cum: Accumulated predictions
+            label_cum: Accumulated labels
 
         Returns:
             dict: Dictionary containing all computed metrics
         """
         # Primary IoU - filter to only eval classes
-        full_epoch_IoU = self.overlap_cum / self.union_cum
-        # Convert eval_indices (training indices) to metrics array indices
+        full_epoch_IoU = overlap_cum / union_cum
+        # eval_indices contain consecutive indices (0,1,2...) for eval classes
+        # Metrics arrays are indexed 0 for the first eval class (output class 1), 1 for second, etc.
+        # Since eval_indices start from the consecutive index of the first eval class,
+        # we need to offset by -1 to get the correct array indices
         iou_indices = [idx - 1 for idx in self.eval_indices]
         epoch_IoU = full_epoch_IoU[iou_indices]
 
         # Additional primary metrics - filter to only eval classes
-        full_precision = self.overlap_cum / (self.pred_cum + 1e-6)
-        full_recall = self.overlap_cum / (self.label_cum + 1e-6)
+        full_precision = overlap_cum / (pred_cum + 1e-6)
+        full_recall = overlap_cum / (label_cum + 1e-6)
         full_f1 = 2 * full_precision * full_recall / (full_precision + full_recall + 1e-6)
         
         precision = full_precision[iou_indices]
@@ -352,7 +356,7 @@ class Trainer(object):
                 progress_bar.set_description(f'CLFT train loss:{loss:.4f}')
 
             # Compute epoch metrics
-            train_metrics = self.compute_epoch_metrics(train_loss, len(train_dataloader))
+            train_metrics = self.compute_epoch_metrics(train_loss, len(train_dataloader), self.overlap_cum, self.union_cum, self.pred_cum, self.label_cum)
 
             # Print training metrics
             print(f'Training Mean IoU for Epoch: {train_metrics["mean_iou"]:.4f}')
@@ -458,36 +462,13 @@ class Trainer(object):
                 valid_loss += loss.item()
                 progress_bar.set_description(f'valid fusion loss: {loss:.4f}')
 
-        # The IoU of one epoch
-        full_valid_epoch_IoU = overlap_cum / union_cum
-        # Convert eval_indices (training indices) to metrics array indices
-        iou_indices = [idx - 1 for idx in self.eval_indices]
-        valid_epoch_IoU = full_valid_epoch_IoU[iou_indices]
-        
-        print(f'Validation Mean IoU for Epoch: {torch.mean(valid_epoch_IoU):.4f}')
+        # Compute validation metrics using the same method as training
+        val_metrics = self.compute_epoch_metrics(valid_loss, len(valid_dataloader), overlap_cum, union_cum, pred_cum, label_cum)
+
+        # Print validation metrics like training
+        print(f'Validation Mean IoU for Epoch: {val_metrics["mean_iou"]:.4f}')
         for i, cls in enumerate(self.eval_classes):
-            print(f'Validation {cls} IoU for Epoch: {valid_epoch_IoU[i]:.4f}')
-        # The loss_rgb of one epoch
-        valid_epoch_loss = valid_loss / len(valid_dataloader)
-        print(f'Average Validation Loss for Epoch: {valid_epoch_loss:.4f}')
-
-        # Compute additional metrics
-        full_valid_precision = overlap_cum / (pred_cum + 1e-6)
-        full_valid_recall = overlap_cum / (label_cum + 1e-6)
-        full_valid_f1 = 2 * full_valid_precision * full_valid_recall / (full_valid_precision + full_valid_recall + 1e-6)
-        
-        valid_precision = full_valid_precision[iou_indices]
-        valid_recall = full_valid_recall[iou_indices]
-        valid_f1 = full_valid_f1[iou_indices]
-
-        # Return metrics as dictionary (consistent with training metrics)
-        val_metrics = {
-            'epoch_IoU': valid_epoch_IoU,
-            'precision': valid_precision,
-            'recall': valid_recall,
-            'f1': valid_f1,
-            'epoch_loss': valid_epoch_loss,
-            'mean_iou': torch.mean(valid_epoch_IoU).item()
-        }
+            print(f'Validation {cls} IoU for Epoch: {val_metrics["epoch_IoU"][i]:.4f}')
+        print(f'Average Validation Loss for Epoch: {val_metrics["epoch_loss"]:.4f}')
 
         return val_metrics

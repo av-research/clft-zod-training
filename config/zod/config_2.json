@@ -16,7 +16,7 @@
 	    "reset_lr":false,
         "early_stop_patience": 200,
         "save_epoch": 20,
-        "model_path": ""
+        "model_path": "./logs/zod/config_2/progress_save/epoch_99_fae0dbf4-ab72-4839-97da-6ffc499264c7.pth"
     },
     "Log": {
         "logdir": "./logs/zod/config_2/"

@@ -16,7 +16,7 @@
 	    "reset_lr":false,
         "early_stop_patience": 200,
         "save_epoch": 20,
-        "model_path": "./logs/waymo/config_1_all_classes/checkpoint_39.pth"
+        "model_path": ""
     },
     "Log": {
         "logdir": "./logs/waymo/config_1_all_classes/"

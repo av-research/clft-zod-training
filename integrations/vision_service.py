@@ -152,3 +152,42 @@ def create_config(name, config_data, config_uuid=None):
     except json.JSONDecodeError as e:
         print(f"Failed to parse response JSON: {e}")
         return None
+
+def send_test_results_from_file(results_file_path):
+    """
+    Send test results from a logged JSON file to the vision service.
+    
+    Args:
+        results_file_path (str): Path to the JSON file containing test results
+    
+    Returns:
+        bool: True if successful, False if failed
+    """
+    try:
+        # Read the logged JSON file
+        with open(results_file_path, 'r') as f:
+            payload = json.load(f)
+        
+        url = f"{VISION_API_BASE_URL}/test-results/upload"
+        
+        response = requests.post(url, json=payload, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("success"):
+            print(f"Successfully uploaded test results to vision service")
+            return True
+        else:
+            print(f"Failed to upload test results: {data.get('message')}")
+            return False
+    except FileNotFoundError:
+        print(f"Test results file not found: {results_file_path}")
+        return False
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse test results JSON file: {e}")
+        return False
+    except requests.exceptions.RequestException as e:
+        print(f"Request failed when uploading test results: {e}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error when uploading test results: {e}")
+        return False

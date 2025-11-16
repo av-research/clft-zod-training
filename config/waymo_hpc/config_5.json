@@ -8,8 +8,8 @@
     },
     "General":{
         "device":"cuda:0",
-        "epochs":50,
-        "batch_size":12,
+        "epochs":100,
+        "batch_size":24,
         "path_predicted_images":"output",
         "seed":0,
         "resume_training":false,

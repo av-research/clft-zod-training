@@ -13,6 +13,8 @@ from torch.utils.data import DataLoader
 from tools.tester import Tester
 from tools.dataset import Dataset
 from tools.dataset_png import DatasetPNG
+from integrations.vision_service import send_test_results_from_file
+from utils.helpers import get_model_path
 
 parser = argparse.ArgumentParser(description='CLFT and CLFCN Testing')
 parser.add_argument('-c', '--config', type=str, required=False, default='config.json', help='The path of the config file')
@@ -66,8 +68,14 @@ for file in test_data_files:
     print()
 
 # Save all results to a single JSON file
+# Generate test UUID
+test_uuid = str(uuid.uuid4())
+
 # Extract epoch number and UUID from model path
-model_path = config['General']['model_path']
+model_path = get_model_path(config)
+if not model_path:
+    print("No model checkpoint found. Please train the model first.")
+    exit(1)
 epoch_match = re.search(r'epoch_(\d+)_([a-f0-9\-]+)\.pth', model_path)
 if epoch_match:
     epoch_num = epoch_match.group(1)
@@ -76,10 +84,7 @@ else:
     # Fallback for old checkpoint format
     epoch_match = re.search(r'checkpoint_(\d+)\.pth', model_path)
     epoch_num = epoch_match.group(1) if epoch_match else '0'
-    epoch_uuid = None
-
-# Generate test UUID
-test_uuid = str(uuid.uuid4())
+    epoch_uuid = test_uuid  # Use test_uuid as fallback
 
 # Create simplified results structure
 combined_results = {
@@ -90,8 +95,16 @@ combined_results = {
     'test_results': all_results
 }
 
-# Save to combined results file with epoch number
-combined_json_path = config['Log']['logdir'] + f'epoch_{epoch_num}_test_results.json'
+# Save to combined results file with epoch number and UUID
+import os
+test_results_dir = config['Log']['logdir'] + 'test_results'
+os.makedirs(test_results_dir, exist_ok=True)
+
+if epoch_uuid:
+    combined_json_path = os.path.join(test_results_dir, f'epoch_{epoch_num}_{epoch_uuid}.json')
+else:
+    combined_json_path = os.path.join(test_results_dir, f'epoch_{epoch_num}_test_results.json')
+    
 with open(combined_json_path, 'w') as f:
     json.dump(combined_results, f, indent=2)
 
@@ -100,3 +113,11 @@ if epoch_uuid:
     print(f'Epoch UUID: {epoch_uuid}')
 print(f'Test UUID: {test_uuid}')
 print(f'Completed testing on {len(test_data_files)} test files')
+
+# Upload test results to vision service
+print("Uploading test results to vision service...")
+upload_success = send_test_results_from_file(combined_json_path)
+if upload_success:
+    print("✅ Test results successfully uploaded to vision service")
+else:
+    print("❌ Failed to upload test results to vision service")

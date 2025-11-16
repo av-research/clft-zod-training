@@ -151,12 +151,20 @@ class Tester(object):
                 batch_recall = 1.0 * batch_overlap / (np.spacing(1) + batch_label)
 
                 # Store metrics for eval classes only
-                for j, eval_idx in enumerate(self.eval_indices):
-                    class_pre[i, j] = batch_precision[eval_idx]
-                    class_rec[i, j] = batch_recall[eval_idx]
+                # Convert eval_indices (training indices) to metrics array indices
+                if self.dataset_name == 'zod':
+                    array_indices = [idx - 1 for idx in self.eval_indices]
+                elif self.dataset_name == 'waymo':
+                    array_indices = [idx - 1 for idx in self.eval_indices]
+                else:
+                    array_indices = self.eval_indices
+                
+                for j, array_idx in enumerate(array_indices):
+                    class_pre[i, j] = batch_precision[array_idx]
+                    class_rec[i, j] = batch_recall[array_idx]
 
                 # Create progress bar description with eval class names
-                progress_desc = ' '.join([f'{cls.upper()}:IoU->{batch_IoU[self.eval_indices[j]]:.4f}'
+                progress_desc = ' '.join([f'{cls.upper()}:IoU->{batch_IoU[array_indices[j]]:.4f}'
                                         for j, cls in enumerate(self.eval_classes)])
                 progress_bar.set_description(progress_desc)
 
@@ -166,9 +174,17 @@ class Tester(object):
             cum_recall = overlap_cum / label_cum
 
             # Filter to eval classes only
-            eval_IoU = cum_IoU[self.eval_indices]
-            eval_precision = cum_precision[self.eval_indices]
-            eval_recall = cum_recall[self.eval_indices]
+            # Convert eval_indices (training indices) to metrics array indices
+            if self.dataset_name == 'zod':
+                array_indices = [idx - 1 for idx in self.eval_indices]
+            elif self.dataset_name == 'waymo':
+                array_indices = [idx - 1 for idx in self.eval_indices]
+            else:
+                array_indices = self.eval_indices
+            
+            eval_IoU = cum_IoU[array_indices]
+            eval_precision = cum_precision[array_indices]
+            eval_recall = cum_recall[array_indices]
 
             # Calculate AP for each eval class
             average_precision = []
@@ -286,12 +302,20 @@ class Tester(object):
                 batch_recall = 1.0 * batch_overlap / (np.spacing(1) + batch_label)
 
                 # Store metrics for eval classes only
-                for j, eval_idx in enumerate(self.eval_indices):
-                    class_pre[i, j] = batch_precision[eval_idx]
-                    class_rec[i, j] = batch_recall[eval_idx]
+                # Convert eval_indices (training indices) to metrics array indices
+                if self.dataset_name == 'zod':
+                    array_indices = [idx - 1 for idx in self.eval_indices]
+                elif self.dataset_name == 'waymo':
+                    array_indices = [idx - 1 for idx in self.eval_indices]
+                else:
+                    array_indices = self.eval_indices
+                
+                for j, array_idx in enumerate(array_indices):
+                    class_pre[i, j] = batch_precision[array_idx]
+                    class_rec[i, j] = batch_recall[array_idx]
 
                 # Create progress bar description with eval class names
-                progress_desc = ' '.join([f'{cls.upper()}:IoU->{batch_IoU[self.eval_indices[j]]:.4f}'
+                progress_desc = ' '.join([f'{cls.upper()}:IoU->{batch_IoU[array_indices[j]]:.4f}'
                                         for j, cls in enumerate(self.eval_classes)])
                 progress_bar.set_description(progress_desc)
 
@@ -301,9 +325,17 @@ class Tester(object):
             cum_recall = overlap_cum / label_cum
 
             # Filter to eval classes only
-            eval_IoU = cum_IoU[self.eval_indices]
-            eval_precision = cum_precision[self.eval_indices]
-            eval_recall = cum_recall[self.eval_indices]
+            # Convert eval_indices (training indices) to metrics array indices
+            if self.dataset_name == 'zod':
+                array_indices = [idx - 1 for idx in self.eval_indices]
+            elif self.dataset_name == 'waymo':
+                array_indices = [idx - 1 for idx in self.eval_indices]
+            else:
+                array_indices = self.eval_indices
+            
+            eval_IoU = cum_IoU[array_indices]
+            eval_precision = cum_precision[array_indices]
+            eval_recall = cum_recall[array_indices]
 
             print('-----------------------------------------')
             for j, cls in enumerate(self.eval_classes):

@@ -18,7 +18,7 @@ import json
 from clft.clft import CLFT
 from utils.helpers import relabel_annotation
 
-from utils.helpers import draw_test_segmentation_map, image_overlay
+from utils.helpers import draw_test_segmentation_map, image_overlay, get_model_path
 
 
 class OpenInput(object):
@@ -204,7 +204,7 @@ def run(modality, backbone, config, config_name):
                 print(f'saving segment result {i}...')
                 cv2.imwrite(seg_path, seg_resize_bgr)
 
-                overlay = image_overlay(rgb_cv2, seg_resize_bgr)
+                overlay = image_overlay(rgb_cv2, cv2.cvtColor(seg_resize_bgr, cv2.COLOR_BGR2RGB))
                 print(f'saving overlay result {i}...')
                 cv2.imwrite(overlay_path, overlay)
 
@@ -267,8 +267,6 @@ if __name__ == '__main__':
                         help='Path to image file (e.g., camera/frame_099988.png) or text file containing image paths (default: zod_dataset/visualize.txt)')
     parser.add_argument('-c', '--config', type=str, default='config/zod/config_4.json',
                         help='Path to config file (default: config/zod/config_4.json)')
-    parser.add_argument('--model_path', type=str, default='logs/zod/config_4/progress_save/epoch_99_109a9b6a-402b-4759-b762-0f3c8a5425a7.pth',
-                        help='Path to model checkpoint')
     args = parser.parse_args()
 
     with open(args.config, 'r') as f:
@@ -277,8 +275,13 @@ if __name__ == '__main__':
     # Extract config name from path (e.g., 'config_1' from 'config/zod/config_1.json')
     config_name = os.path.splitext(os.path.basename(args.config))[0]
 
-    # Set model path
-    configs['General']['model_path'] = args.model_path
+    # Get model path from config (or latest checkpoint if not specified)
+    model_path = get_model_path(configs)
+    if not model_path:
+        print("No model checkpoint found!")
+        sys.exit(1)
+    configs['General']['model_path'] = model_path
+    print(f"Using model: {model_path}")
 
     # Always use CLFT backbone and read mode from config
     backbone = 'clft'

@@ -8,6 +8,8 @@ cd /gpfs/mariana/home/totahv/
 
 watch -n1 squeue -u totahv
 
+sbatch -J test-1z test.slurm ./config/zod_hpc/config_1.json
+
 # ZOD Base
 sbatch -J train-1z train.slurm ./config/zod_hpc/config_1.json
 sbatch -J train-4z train.slurm ./config/zod_hpc/config_4.json
@@ -46,8 +48,8 @@ sbatch -J tr-1w3 train.slurm ./config/waymo/config_1_vehicles_only.json
 # Copy json files from server to local
 rsync -avz --include='*/' --include='*.json' --exclude='*' totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/zod_logs/ /media/tom/ml/zod_logs
 
-# Copy latest pth file from server to local
-rsync -avz totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/clft-zod-training/logs/waymo/config_1_all_classes/progress_save/checkpoint_39.pth /media/tom/ml/waymo/config_1_all_classes
-
 # Copy zod_dataset to server
 rsync -avz /media/tom/ml/projects/clft-zod-training/zod_dataset totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/clft-zod-training/
+
+# Download specific epoch file from server to local
+rsync -avz totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/zod_logs/config_1/progress_save/epoch_99_b51519ea-a4e3-4dfe-8e41-ca3d729b1164.pth /media/tom/ml/projects/clft-zod-training/logs/zod/config_1/progress_save/

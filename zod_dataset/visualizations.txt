@@ -1,0 +1,12 @@
+camera/frame_017119.png
+camera/frame_002249.png
+camera/frame_041321.png
+camera/frame_004763.png
+camera/frame_003591.png
+camera/frame_040407.png
+camera/frame_020367.png
+camera/frame_044724.png
+camera/frame_046857.png
+camera/frame_084606.png
+camera/frame_022873.png
+camera/frame_052860.png
