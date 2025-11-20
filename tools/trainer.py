@@ -5,11 +5,9 @@ import sys
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 import time
 
-from clfcn.fusion_net import FusionNet
 from utils.metrics import find_overlap_1, zod_find_overlap_1
 from clft.clft import CLFT
 from utils.helpers import EarlyStopping, get_model_path
@@ -75,13 +73,7 @@ class Trainer(object):
         self.num_unique_classes = len(unique_indices)
         print(f"Total classes in config: {self.nclasses}, Unique classes after relabeling: {self.num_unique_classes}")
 
-        if config['CLI']['backbone'] == 'clfcn':
-            self.model = FusionNet()
-            print(f"Using backbone {config['CLI']['backbone']}")
-            self.optimizer_clfcn = torch.optim.Adam(self.model.parameters(), lr=config['CLFCN']['clfcn_lr'])
-            self.scheduler_clfcn = ReduceLROnPlateau(self.optimizer_clfcn)
-
-        elif config['CLI']['backbone'] == 'clft':
+        if config['CLI']['backbone'] == 'clft':
             resize = config['Dataset']['transforms']['resize']
             self.model = CLFT(
                 RGB_tensor_size=(3, resize, resize),

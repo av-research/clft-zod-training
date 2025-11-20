@@ -6,12 +6,8 @@ import json
 import torch
 import numpy as np
 from tqdm import tqdm
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-import datetime
 
-from clfcn.fusion_net import FusionNet
 from utils.helpers import get_model_path
-from utils.metrics import find_overlap
 from utils.metrics import find_overlap_1
 from utils.metrics import auc_ap
 from utils.metrics import zod_find_overlap_1
@@ -32,13 +28,7 @@ class Tester(object):
         if self.rgb_only:
             print("Using RGB-only mode (no separate LiDAR input)")
 
-        if config['CLI']['backbone'] == 'clfcn':
-            self.model = FusionNet()
-            print(f"Using backbone {config['CLI']['backbone']}")
-            self.optimizer_fcn = torch.optim.Adam(self.model.parameters(), lr=config['CLFCN']['clfcn_lr'])
-            self.scheduler_fcn = ReduceLROnPlateau(self.optimizer_fcn)
-
-        elif config['CLI']['backbone'] == 'clft':
+        if config['CLI']['backbone'] == 'clft':
             # Determine actual number of unique classes after relabeling
             unique_indices = set(cls['training_index'] for cls in config['Dataset']['classes'])
             num_unique_classes = len(unique_indices)
