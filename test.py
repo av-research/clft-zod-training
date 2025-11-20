@@ -1,123 +1,242 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+Refactored testing script using modular components.
+"""
 import json
-import numpy as np
 import argparse
+import uuid
 import datetime
 import re
-import uuid
-
+import os
+import time
+import numpy as np
+import torch
 from torch.utils.data import DataLoader
 
-from tools.tester import Tester
-from tools.dataset import Dataset
-from tools.dataset_png import DatasetPNG
+from core.model_builder import ModelBuilder
+from core.metrics_calculator import MetricsCalculator
+from core.testing_engine import TestingEngine
+from utils.metrics import find_overlap_exclude_bg_ignore
 from integrations.vision_service import send_test_results_from_file
 from utils.helpers import get_model_path
 
-parser = argparse.ArgumentParser(description='CLFT and CLFCN Testing')
-parser.add_argument('-c', '--config', type=str, required=False, default='config.json', help='The path of the config file')
-args = parser.parse_args()
-config_file = args.config
 
-with open(config_file, 'r') as f:
-    config = json.load(f)
+def calculate_num_classes(config):
+    """
+    Calculate number of training classes.
+    
+    Returns the count of classes defined in train_classes.
+    """
+    return len(config['Dataset']['train_classes'])
 
-np.random.seed(config['General']['seed'])
 
-tester = Tester(config)
+def calculate_num_eval_classes(config, num_classes):
+    """
+    Calculate number of evaluation classes (excludes background).
+    
+    Excludes only class 0 (background) from evaluation.
+    All train_classes with index > 0 are evaluated.
+    """
+    # Count classes with index > 0
+    eval_count = sum(1 for cls in config['Dataset']['train_classes'] if cls['index'] > 0)
+    return eval_count
 
-test_data_path = config['CLI']['path']
-test_data_files = [
-    'test_day_fair.txt',
-    'test_night_fair.txt',
-    'test_day_rain.txt',
-    'test_night_rain.txt'
-]
 
-# Collect results from all test files
-all_results = {}
-
-for file in test_data_files:
-    path = test_data_path + file
-    print(f"Testing with the path {path}")
-
-    # Use DatasetPNG for ZOD, Dataset for others
+def setup_dataset(config):
+    """Setup dataset based on configuration."""
     if config['Dataset']['name'] == 'zod':
-        test_data = DatasetPNG(config, 'test', path)
+        from tools.dataset_png import DatasetPNG as Dataset
     else:
-        test_data = Dataset(config, 'test', path)
+        from tools.dataset import Dataset
+    return Dataset
 
-    test_dataloader = DataLoader(test_data,
-                                batch_size=config['General']['batch_size'],
-                                shuffle=False,
-                                pin_memory=True,
-                                drop_last=True)
 
-    # Get results for this test file
-    results = tester.test_clft_return_results(test_dataloader, config['CLI']['mode'])
+def setup_overlap_function(config):
+    """Setup dataset-specific overlap calculation function."""
+    dataset_name = config['Dataset']['name']
+    if dataset_name in ['zod', 'waymo']:
+        print(f"Using unified IoU calculation (excludes background only)")
+        return find_overlap_exclude_bg_ignore
+
+
+
+def extract_epoch_info(model_path):
+    """Extract epoch number and UUID from model path."""
+    epoch_match = re.search(r'epoch_(\d+)_([a-f0-9\-]+)\.pth', model_path)
+    if epoch_match:
+        return int(epoch_match.group(1)), epoch_match.group(2)
     
-    # Extract weather condition from filename (remove 'test_' prefix)
-    weather_condition = file.replace('test_', '').replace('.txt', '')
-    
-    # Store results with weather condition as key
-    all_results[weather_condition] = results
-    
-    print(f'Testing completed for {weather_condition}')
-    print()
-
-# Save all results to a single JSON file
-# Generate test UUID
-test_uuid = str(uuid.uuid4())
-
-# Extract epoch number and UUID from model path
-model_path = get_model_path(config)
-if not model_path:
-    print("No model checkpoint found. Please train the model first.")
-    exit(1)
-epoch_match = re.search(r'epoch_(\d+)_([a-f0-9\-]+)\.pth', model_path)
-if epoch_match:
-    epoch_num = epoch_match.group(1)
-    epoch_uuid = epoch_match.group(2)
-else:
     # Fallback for old checkpoint format
     epoch_match = re.search(r'checkpoint_(\d+)\.pth', model_path)
-    epoch_num = epoch_match.group(1) if epoch_match else '0'
-    epoch_uuid = test_uuid  # Use test_uuid as fallback
-
-# Create simplified results structure
-combined_results = {
-    'timestamp': datetime.datetime.now().isoformat(),
-    'epoch': int(epoch_num),
-    'epoch_uuid': epoch_uuid,
-    'test_uuid': test_uuid,
-    'test_results': all_results
-}
-
-# Save to combined results file with epoch number and UUID
-import os
-test_results_dir = config['Log']['logdir'] + 'test_results'
-os.makedirs(test_results_dir, exist_ok=True)
-
-if epoch_uuid:
-    combined_json_path = os.path.join(test_results_dir, f'epoch_{epoch_num}_{epoch_uuid}.json')
-else:
-    combined_json_path = os.path.join(test_results_dir, f'epoch_{epoch_num}_test_results.json')
+    if epoch_match:
+        return int(epoch_match.group(1)), None
     
-with open(combined_json_path, 'w') as f:
-    json.dump(combined_results, f, indent=2)
+    return 0, None
 
-print(f'All test results saved to: {combined_json_path}')
-if epoch_uuid:
-    print(f'Epoch UUID: {epoch_uuid}')
-print(f'Test UUID: {test_uuid}')
-print(f'Completed testing on {len(test_data_files)} test files')
 
-# Upload test results to vision service
-print("Uploading test results to vision service...")
-upload_success = send_test_results_from_file(combined_json_path)
-if upload_success:
-    print("✅ Test results successfully uploaded to vision service")
-else:
-    print("❌ Failed to upload test results to vision service")
+def save_test_results(config, all_results, epoch_num, epoch_uuid, test_uuid):
+    """Save test results to JSON file."""
+    combined_results = {
+        'timestamp': datetime.datetime.now().isoformat(),
+        'epoch': epoch_num,
+        'epoch_uuid': epoch_uuid,
+        'test_uuid': test_uuid,
+        'test_results': all_results
+    }
+    
+    # Create results directory
+    test_results_dir = os.path.join(config['Log']['logdir'], 'test_results')
+    os.makedirs(test_results_dir, exist_ok=True)
+    
+    # Generate filename
+    if epoch_uuid:
+        filename = f'epoch_{epoch_num}_{epoch_uuid}.json'
+    else:
+        filename = f'epoch_{epoch_num}_test_results.json'
+    
+    filepath = os.path.join(test_results_dir, filename)
+    
+    # Save to file
+    with open(filepath, 'w') as f:
+        json.dump(combined_results, f, indent=2)
+    
+    print(f'All test results saved to: {filepath}')
+    if epoch_uuid:
+        print(f'Epoch UUID: {epoch_uuid}')
+    print(f'Test UUID: {test_uuid}')
+    
+    return filepath
+
+
+def run_test_suite(tester, config, test_data_files, test_data_path, num_classes):
+    """Run tests on all test files and collect results."""
+    Dataset = setup_dataset(config)
+    all_results = {}
+    
+    for file in test_data_files:
+        path = os.path.join(test_data_path, file)
+        print(f"Testing with: {path}")
+        
+        # Create dataset and dataloader
+        test_data = Dataset(config, 'test', path)
+        test_dataloader = DataLoader(
+            test_data,
+            batch_size=config['General']['batch_size'],
+            shuffle=False,
+            pin_memory=True,
+            drop_last=True
+        )
+        
+        # Get modality
+        modality = config['CLI']['mode']
+        
+        # Track inference time
+        start_time = time.time()
+        
+        # Run test
+        results, inference_stats = tester.test(test_dataloader, modality, num_classes)
+        
+        # Calculate total time
+        total_time = time.time() - start_time
+        
+        # Add timing information to results
+        results['inference_time'] = {
+            'total_seconds': round(total_time, 2),
+            'samples': inference_stats['total_samples'],
+            'batches': inference_stats['total_batches'],
+            'avg_per_sample_ms': round((inference_stats['total_inference_time'] / inference_stats['total_samples']) * 1000, 2),
+            'avg_per_batch_ms': round((inference_stats['total_inference_time'] / inference_stats['total_batches']) * 1000, 2),
+            'throughput_fps': round(inference_stats['total_samples'] / inference_stats['total_inference_time'], 2)
+        }
+        
+        # Extract weather condition from filename
+        weather_condition = file.replace('test_', '').replace('.txt', '')
+        all_results[weather_condition] = results
+        
+        print(f'Testing completed for {weather_condition}')
+        print(f'Inference time: {results["inference_time"]["avg_per_sample_ms"]}ms/sample, '
+              f'{results["inference_time"]["throughput_fps"]} FPS\n')
+    
+    return all_results
+
+
+def main():
+    # Parse arguments
+    parser = argparse.ArgumentParser(description='CLFT Testing (Refactored)')
+    parser.add_argument('-c', '--config', type=str, required=False,
+                       default='config.json', help='Path to config file')
+    args = parser.parse_args()
+    
+    # Load configuration
+    with open(args.config, 'r') as f:
+        config = json.load(f)
+    
+    # Set random seed
+    np.random.seed(config['General']['seed'])
+    
+    # Setup device
+    device = torch.device(config['General']['device']
+                         if torch.cuda.is_available() else "cpu")
+    print(f"Device: {device}")
+    
+    # Get model path
+    model_path = get_model_path(config)
+    if not model_path:
+        print("No model checkpoint found. Please train the model first.")
+        exit(1)
+    
+    print(f"Using model: {model_path}")
+    
+    # Extract epoch info
+    epoch_num, epoch_uuid = extract_epoch_info(model_path)
+    test_uuid = str(uuid.uuid4())
+    
+    # Calculate class counts
+    num_classes = calculate_num_classes(config)
+    num_eval_classes = calculate_num_eval_classes(config, num_classes)
+    print(f"Total classes: {num_classes}, Evaluation classes: {num_eval_classes}")
+    
+    # Build and load model
+    model_builder = ModelBuilder(config, device)
+    model = model_builder.build_model()
+    model, _ = model_builder.load_checkpoint(model, model_path)
+    model.eval()
+    
+    # Setup overlap function
+    find_overlap_func = setup_overlap_function(config)
+    
+    # Setup metrics calculator
+    metrics_calc = MetricsCalculator(config, num_eval_classes, find_overlap_func)
+    
+    # Setup testing engine
+    tester = TestingEngine(model, metrics_calc, config, device)
+    
+    # Define test files
+    test_data_path = config['CLI']['path']
+    test_data_files = [
+        'test_day_fair.txt',
+        'test_night_fair.txt',
+        'test_day_rain.txt',
+        'test_night_rain.txt'
+    ]
+    
+    # Run test suite
+    all_results = run_test_suite(tester, config, test_data_files, test_data_path, num_classes)
+    
+    # Save results
+    results_file = save_test_results(config, all_results, epoch_num, epoch_uuid, test_uuid)
+    
+    # Upload to vision service
+    print("Uploading test results to vision service...")
+    upload_success = send_test_results_from_file(results_file)
+    if upload_success:
+        print("✅ Test results successfully uploaded to vision service")
+    else:
+        print("❌ Failed to upload test results to vision service")
+    
+    print(f'Completed testing on {len(test_data_files)} test files')
+
+
+if __name__ == '__main__':
+    main()

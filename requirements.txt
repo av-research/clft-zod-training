@@ -7,3 +7,8 @@ timm
 einops
 opencv-python
 requests
+pandas
+matplotlib
+Pillow
+psutil
+nvidia-ml-py

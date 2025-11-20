@@ -19,7 +19,7 @@ import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 from torch.utils.data import Dataset
 from utils.lidar_process import *
-from utils.helpers import relabel_annotation
+from utils.helpers import get_annotation_path
 
 
 class DatasetPNG(Dataset):
@@ -90,23 +90,15 @@ class DatasetPNG(Dataset):
         # Construct paths (same as original dataset)
         if self.config['Dataset']['name'] == 'zod':
             cam_path = os.path.join(dataroot, self.list_examples_cam[idx])
-            # Use appropriate annotation based on training mode
-            if self.config.get('CLI', {}).get('mode') == 'rgb':
-                anno_path = cam_path.replace('/camera', '/annotation_camera_only')
-            elif self.config.get('CLI', {}).get('mode') == 'lidar':
-                anno_path = cam_path.replace('/camera', '/annotation_lidar_only')
-            elif self.config.get('CLI', {}).get('mode') == 'cross_fusion':
-                anno_path = cam_path.replace('/camera', '/annotation_camera_only')
+            dataset_name = self.config['Dataset']['name']
+            anno_path = get_annotation_path(cam_path, dataset_name, self.config)
 
             # Use PNG instead of pickle
             png_path = cam_path.replace('/camera', '/lidar_png').replace('.png', '.png')
 
             rgb = Image.open(cam_path).convert('RGB')
-            # Raw ZOD annotations are already in the correct format for the config
+            # Load raw ZOD annotations without relabeling (relabeling happens in training/testing loops)
             anno = torch.from_numpy(np.array(Image.open(anno_path))).unsqueeze(0).long()
-            
-            # Apply configurable relabeling based on config classes
-            anno = relabel_annotation(anno.squeeze(0), self.config)
 
             # Load LiDAR projection from PNG only if not in RGB-only mode
             rgb_only = self.config.get('CLI', {}).get('mode') == 'rgb'

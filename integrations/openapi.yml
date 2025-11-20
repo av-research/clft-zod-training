@@ -28,6 +28,8 @@ tags:
     description: Training comments and feedback
   - name: Test Results
     description: Model testing and evaluation results
+  - name: Visualizations
+    description: Training epoch visualization management
 
 components:
   schemas:
@@ -287,21 +289,194 @@ components:
         results:
           type: object
           description: "Epoch training results with metrics per phase and class"
-          example:
+          properties:
             train:
-              loss: 0.123
-              mean_iou: 0.85
-              vehicle:
-                iou: 0.90
-                precision: 0.92
-                recall: 0.88
+              type: object
+              properties:
+                loss:
+                  type: number
+                  example: 0.123
+                mean_iou:
+                  type: number
+                  example: 0.85
+                vehicle:
+                  type: object
+                  properties:
+                    iou:
+                      type: number
+                      example: 0.90
+                    precision:
+                      type: number
+                      example: 0.92
+                    recall:
+                      type: number
+                      example: 0.88
+                    f1:
+                      type: number
+                      example: 0.90
+                sign:
+                  type: object
+                  properties:
+                    iou:
+                      type: number
+                      example: 0.80
+                    precision:
+                      type: number
+                      example: 0.85
+                    recall:
+                      type: number
+                      example: 0.82
+                    f1:
+                      type: number
+                      example: 0.83
+                human:
+                  type: object
+                  properties:
+                    iou:
+                      type: number
+                      example: 0.75
+                    precision:
+                      type: number
+                      example: 0.80
+                    recall:
+                      type: number
+                      example: 0.78
+                    f1:
+                      type: number
+                      example: 0.79
+                loss:
+                  type: number
+                  example: 0.123
+                mean_iou:
+                  type: number
+                  example: 0.85
             val:
-              loss: 0.145
-              mean_iou: 0.82
-              vehicle:
-                iou: 0.87
-                precision: 0.89
-                recall: 0.85
+              type: object
+              properties:
+                loss:
+                  type: number
+                  example: 0.145
+                mean_iou:
+                  type: number
+                  example: 0.82
+                vehicle:
+                  type: object
+                  properties:
+                    iou:
+                      type: number
+                      example: 0.87
+                    precision:
+                      type: number
+                      example: 0.89
+                    recall:
+                      type: number
+                      example: 0.85
+                    f1:
+                      type: number
+                      example: 0.87
+                sign:
+                  type: object
+                  properties:
+                    iou:
+                      type: number
+                      example: 0.78
+                    precision:
+                      type: number
+                      example: 0.82
+                    recall:
+                      type: number
+                      example: 0.80
+                    f1:
+                      type: number
+                      example: 0.81
+                human:
+                  type: object
+                  properties:
+                    iou:
+                      type: number
+                      example: 0.72
+                    precision:
+                      type: number
+                      example: 0.75
+                    recall:
+                      type: number
+                      example: 0.78
+                    f1:
+                      type: number
+                      example: 0.76
+                loss:
+                  type: number
+                  example: 0.145
+                mean_iou:
+                  type: number
+                  example: 0.82
+            system_info:
+              type: object
+              description: "System information and hardware details"
+              properties:
+                cpu_percent:
+                  type: number
+                  example: 3.0
+                cpu_count:
+                  type: integer
+                  example: 20
+                cpu_count_physical:
+                  type: integer
+                  example: 14
+                memory_percent:
+                  type: number
+                  example: 68.8
+                memory_used_gb:
+                  type: number
+                  example: 21.41
+                memory_max_gb:
+                  type: number
+                  example: 31.11
+                process:
+                  type: object
+                  properties:
+                    cpu_percent:
+                      type: number
+                      example: 0.0
+                    memory_gb:
+                      type: number
+                      example: 3.6
+                    threads:
+                      type: integer
+                      example: 46
+                gpu:
+                  type: object
+                  properties:
+                    gpu_0:
+                      type: object
+                      properties:
+                        memory_used_gb:
+                          type: number
+                          example: 1.86
+                        memory_max_gb:
+                          type: number
+                          example: 15.44
+                        memory_reserved_gb:
+                          type: number
+                          example: 10.74
+                        memory_utilization_percent:
+                          type: number
+                          example: 12.07
+                        gpu_utilization_percent:
+                          type: number
+                          example: 10.0
+                        temperature_celsius:
+                          type: number
+                          example: 76.0
+                        power_watts:
+                          type: number
+                          example: 226.7
+                        power_limit_watts:
+                          type: number
+                          example: 300.0
+                        fan_speed_percent:
+                          type: number
+                          example: 91.0
         learning_rate:
           type: number
           example: 0.001
@@ -775,6 +950,200 @@ components:
               items:
                 type: integer
               example: [1, 2, 5, 10, 15, 20]
+      required:
+        - success
+        - data
+
+    # Visualization schemas
+    Visualization:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        epoch_uuid:
+          type: string
+          example: "epoch-uuid-123"
+        visualization_uuid:
+          type: string
+          example: "viz-uuid-456"
+        filename:
+          type: string
+          example: "confusion_matrix.png"
+        type:
+          type: string
+          example: "confusion_matrix"
+          description: "Dynamic visualization type (e.g., confusion_matrix, roc_curve, loss_plot)"
+        minioFileId:
+          type: string
+          example: "visualizations/epoch-uuid-123/confusion_matrix/viz-uuid-456.png"
+        mimetype:
+          type: string
+          example: "image/png"
+        size:
+          type: integer
+          example: 102400
+        metadata:
+          type: object
+          description: "Additional metadata"
+        uploadedAt:
+          type: string
+          format: date-time
+        signedUrl:
+          type: string
+          description: "Temporary signed URL for accessing the visualization"
+        urlExpiresAt:
+          type: string
+          format: date-time
+        epoch:
+          type: integer
+          example: 10
+          description: "Epoch number (populated when fetching)"
+        training_uuid:
+          type: string
+          example: "training-uuid-789"
+          description: "Training UUID (populated when fetching all visualizations)"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - epoch_uuid
+        - visualization_uuid
+        - filename
+        - type
+        - minioFileId
+
+    VisualizationUploadUrlRequest:
+      type: object
+      properties:
+        epoch_uuid:
+          type: string
+          example: "epoch-uuid-123"
+        filename:
+          type: string
+          example: "confusion_matrix.png"
+        type:
+          type: string
+          example: "confusion_matrix"
+        mimetype:
+          type: string
+          example: "image/png"
+      required:
+        - epoch_uuid
+        - filename
+        - type
+        - mimetype
+
+    VisualizationUploadUrlResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            uploadUrl:
+              type: string
+              example: "https://minio.example.com/vision/visualizations/..."
+            visualization_uuid:
+              type: string
+              example: "viz-uuid-456"
+            minioFileId:
+              type: string
+              example: "visualizations/epoch-uuid-123/confusion_matrix/viz-uuid-456.png"
+            expiresAt:
+              type: string
+              format: date-time
+      required:
+        - success
+        - data
+
+    CreateVisualizationRequest:
+      type: object
+      properties:
+        epoch_uuid:
+          type: string
+          example: "epoch-uuid-123"
+        visualization_uuid:
+          type: string
+          example: "viz-uuid-456"
+        filename:
+          type: string
+          example: "confusion_matrix.png"
+        type:
+          type: string
+          example: "confusion_matrix"
+        minioFileId:
+          type: string
+          example: "visualizations/epoch-uuid-123/confusion_matrix/viz-uuid-456.png"
+        mimetype:
+          type: string
+          example: "image/png"
+        size:
+          type: integer
+          example: 102400
+        metadata:
+          type: object
+      required:
+        - epoch_uuid
+        - visualization_uuid
+        - filename
+        - type
+        - minioFileId
+
+    VisualizationsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            visualizations:
+              type: array
+              items:
+                $ref: '#/components/schemas/Visualization'
+            pagination:
+              type: object
+              properties:
+                page:
+                  type: integer
+                  example: 1
+                limit:
+                  type: integer
+                  example: 50
+                total:
+                  type: integer
+                  example: 100
+                pages:
+                  type: integer
+                  example: 2
+            total:
+              type: integer
+              example: 100
+      required:
+        - success
+        - data
+
+    VisualizationTypesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            types:
+              type: array
+              items:
+                type: string
+              example: ["confusion_matrix", "roc_curve", "loss_plot", "precision_recall"]
       required:
         - success
         - data
@@ -2004,6 +2373,59 @@ paths:
                   example: 0.001
                 metadata:
                   type: object
+                results:
+                  type: object
+                  description: "Epoch training results with metrics per phase and class"
+                  properties:
+                    train:
+                      type: object
+                      properties:
+                        loss:
+                          type: number
+                          example: 0.123
+                        mean_iou:
+                          type: number
+                          example: 0.85
+                    val:
+                      type: object
+                      properties:
+                        loss:
+                          type: number
+                          example: 0.145
+                        mean_iou:
+                          type: number
+                          example: 0.82
+                    system_info:
+                      type: object
+                      description: "System information and hardware details"
+                      properties:
+                        cpu_percent:
+                          type: number
+                          example: 3.0
+                        memory_percent:
+                          type: number
+                          example: 68.8
+                        gpu:
+                          type: object
+                          properties:
+                            gpu_0:
+                              type: object
+                              properties:
+                                memory_utilization_percent:
+                                  type: number
+                                  example: 12.07
+                                gpu_utilization_percent:
+                                  type: number
+                                  example: 10.0
+                                temperature_celsius:
+                                  type: number
+                                  example: 76.0
+                                power_watts:
+                                  type: number
+                                  example: 226.7
+                                fan_speed_percent:
+                                  type: number
+                                  example: 91.0
       responses:
         '200':
           description: Epoch updated successfully
@@ -2128,6 +2550,16 @@ paths:
                     val:
                       loss: 0.145
                       mean_iou: 0.82
+                    system_info:
+                      cpu_percent: 3.0
+                      memory_percent: 68.8
+                      gpu:
+                        gpu_0:
+                          memory_utilization_percent: 12.07
+                          gpu_utilization_percent: 10.0
+                          temperature_celsius: 76.0
+                          power_watts: 226.7
+                          fan_speed_percent: 91.0
                 learning_rate:
                   type: number
                   example: 0.001
@@ -2221,6 +2653,12 @@ paths:
                         type: integer
                       metrics:
                         type: object
+                      results:
+                        type: object
+                        properties:
+                          system_info:
+                            type: object
+                            description: "System information and hardware details"
                       loss:
                         type: number
                       accuracy:
@@ -3132,6 +3570,301 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TestResultsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Visualization Endpoints
+  /visualizations/upload-url:
+    post:
+      tags:
+        - Visualizations
+      summary: Get upload signed URL for visualization
+      description: Generate a signed URL for direct client upload of visualization to MinIO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisualizationUploadUrlRequest'
+      responses:
+        '200':
+          description: Upload URL generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisualizationUploadUrlResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /visualizations:
+    post:
+      tags:
+        - Visualizations
+      summary: Create visualization record
+      description: Create a visualization record after uploading file to MinIO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVisualizationRequest'
+      responses:
+        '201':
+          description: Visualization created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Visualization with this UUID already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /visualizations/epoch/{epoch_uuid}:
+    get:
+      tags:
+        - Visualizations
+      summary: Get visualizations by epoch UUID
+      description: Retrieve all visualizations for a specific epoch
+      parameters:
+        - name: epoch_uuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Epoch UUID
+        - name: type
+          in: query
+          schema:
+            type: string
+          description: Filter by visualization type
+      responses:
+        '200':
+          description: Visualizations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      visualizations:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Visualization'
+                      total:
+                        type: integer
+                        example: 10
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /visualizations/training/{training_uuid}:
+    get:
+      tags:
+        - Visualizations
+      summary: Get visualizations by training UUID
+      description: Retrieve all visualizations for all epochs of a training run. If training_uuid is empty or not provided, returns all visualizations across all trainings.
+      parameters:
+        - name: training_uuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Training UUID (can be empty to get all visualizations)
+        - name: type
+          in: query
+          schema:
+            type: string
+          description: Filter by visualization type
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of visualizations per page
+      responses:
+        '200':
+          description: Visualizations retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisualizationsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /visualizations/training:
+    get:
+      tags:
+        - Visualizations
+      summary: Get all visualizations
+      description: Retrieve all visualizations across all trainings with optional filtering and pagination
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+          description: Filter by visualization type
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of visualizations per page
+      responses:
+        '200':
+          description: Visualizations retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisualizationsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /visualizations/types:
+    get:
+      tags:
+        - Visualizations
+      summary: Get all visualization types
+      description: Retrieve all distinct visualization types, optionally filtered by training or epoch
+      parameters:
+        - name: training_uuid
+          in: query
+          schema:
+            type: string
+          description: Filter types by training UUID
+        - name: epoch_uuid
+          in: query
+          schema:
+            type: string
+          description: Filter types by epoch UUID
+      responses:
+        '200':
+          description: Visualization types retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisualizationTypesResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /visualizations/{visualization_uuid}:
+    get:
+      tags:
+        - Visualizations
+      summary: Get visualization by UUID
+      description: Retrieve a specific visualization by its UUID
+      parameters:
+        - name: visualization_uuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Visualization UUID
+      responses:
+        '200':
+          description: Visualization retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Visualization not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Visualizations
+      summary: Delete visualization
+      description: Delete a visualization and its file from storage
+      parameters:
+        - name: visualization_uuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Visualization UUID
+      responses:
+        '200':
+          description: Visualization deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Visualization not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
           content:

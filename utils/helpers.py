@@ -7,131 +7,57 @@ import shutil
 import datetime
 import glob
 
-label_colors_list = [
-        (0, 0, 0),        # 0: background - black
-        (128, 128, 128),  # 1: ignore - gray
-        (255, 0, 0),      # 2: vehicle - blue
-        (0, 0, 255),      # 3: sign - red
-        (0, 255, 0),      # 4: cyclist - green
-        (255, 255, 0)]    # 5: pedestrian - cyan
-
-
 def creat_dir(config):
     logdir = config['Log']['logdir']
     if not os.path.exists(logdir):
         os.makedirs(logdir)
         print(f'Making log directory {logdir}...')
-    if not os.path.exists(logdir + 'progress_save'):
-        os.makedirs(logdir + 'progress_save')
+    if not os.path.exists(logdir + 'checkpoints'):
+        os.makedirs(logdir + 'checkpoints')
 
-def waymo_anno_class_relabel(annotation):
-    """
-    Reassign the indices of the objects in annotation(PointCloud);
-    :parameter annotation: 0->ignore, 1->vehicle, 2->pedestrian, 3->sign,
-                            4->cyclist, 5->background
-    :return annotation: 0->background+sign, 1->vehicle
-                            2->pedestrian+cyclist, 3->ignore
-    """
-    annotation = np.array(annotation)
-
-    mask_ignore = annotation == 0
-    mask_sign = annotation == 3
-    mask_cyclist = annotation == 4
-    mask_background = annotation == 5
-
-    annotation[mask_sign] = 0
-    annotation[mask_background] = 0
-    annotation[mask_cyclist] = 2
-    annotation[mask_ignore] = 3
-
-    return torch.from_numpy(annotation).unsqueeze(0).long() # [H,W]->[1,H,W]
-
-
-def waymo_anno_class_relabel_1(annotation):
-    """
-    Reassign the indices of the objects in annotation(PointCloud);
-    Standardizes class indices to consistent mapping:
-    :parameter annotation: 0->ignore, 1->vehicle, 2->pedestrian, 3->sign,
-                            4->cyclist, 5->background
-    :return annotation: 0->background, 1->vehicle, 2->pedestrian, 3->sign, 4->cyclist, 5->ignore
-    """
-    annotation = np.array(annotation)
-
-    # Create a mapping array to standardize class indices
-    # Original: 0->ignore, 1->vehicle, 2->pedestrian, 3->sign, 4->cyclist, 5->background
-    # Target: 0->background, 1->vehicle, 2->pedestrian, 3->sign, 4->cyclist, 5->ignore
-    
-    mapping = np.full(6, 5, dtype=int)  # Default to ignore
-    mapping[5] = 0  # background: 5 -> 0
-    mapping[1] = 1  # vehicle: 1 -> 1
-    mapping[2] = 2  # pedestrian: 2 -> 2
-    mapping[3] = 3  # sign: 3 -> 3
-    mapping[4] = 4  # cyclist: 4 -> 4
-    # ignore: 0 -> 5 (already set as default)
-    
-    annotation = mapping[annotation]
-
-    return torch.from_numpy(annotation).unsqueeze(0).long() # [H,W]->[1,H,W]
-
-
-def zod_anno_class_relabel(annotation):
-    """
-    ZOD annotations are now already in the correct class mapping format.
-    
-    Class mapping:
-    - 0: background
-    - 1: ignore (LiDAR-only regions)
-    - 2: vehicle (from SAM)
-    - 3: sign (from SAM)
-    - 4: cyclist (from SAM)
-    - 5: pedestrian (from SAM)
-    
-    No relabeling needed.
-    """
-    annotation = np.array(annotation)
-    
-    # Annotations are already in the correct format, just return as tensor
-    return torch.from_numpy(annotation).unsqueeze(0).long() # [H,W]->[1,H,W]
-
+def get_annotation_path(cam_path, dataset_name, config):
+    """Get annotation path based on dataset and config."""
+    if dataset_name == 'zod':
+        anno_folder = config['Dataset']['annotation_path']
+        return cam_path.replace('/camera', f'/{anno_folder}')
+    else:  # waymo
+        return cam_path.replace('/camera/', '/annotation/')
 
 def relabel_annotation(annotation, config):
     """
-    Relabel annotation based on configurable class indices from config.
+    Relabel annotation from dataset indices to training indices.
     
-    This allows for flexible class mapping, including merging classes by assigning
-    them the same index value. Creates consecutive indices starting from 0.
+    Uses the new config format with dataset_classes and train_classes.
+    Supports class merging through dataset_mapping.
     
     Args:
-        annotation: numpy array or torch tensor with original class indices
-        config: configuration dictionary containing Dataset.classes with 'color' and 'index' fields
+        annotation: numpy array or torch tensor with dataset class indices
+        config: configuration dictionary with Dataset.train_classes
         
     Returns:
-        torch tensor with relabeled indices [1, H, W] using consecutive indices
+        torch tensor with training indices [1, H, W]
     """
     annotation = np.array(annotation)
     
-    classes = config['Dataset']['classes']
+    train_classes = config['Dataset']['train_classes']
     
-    # Create mapping from config index to consecutive training index
-    # This handles class merging when multiple classes share the same config index
-    config_index_to_training_index = {}
-    unique_config_indices = sorted(set(cls['training_index'] for cls in classes))
-    for training_index, config_index in enumerate(unique_config_indices):
-        config_index_to_training_index[config_index] = training_index
+    # Find max dataset index to create mapping array
+    max_dataset_index = max(
+        max(mapping) for cls in train_classes 
+        for mapping in [cls['dataset_mapping']]
+    )
     
-    # Create the final mapping from original annotation values to training indices
-    # Use a conservative size to handle all possible annotation values (ZOD uses 0-5)
-    max_original_value = max(6, max(c['original_index'] for c in classes) + 1)  # At least 6 for ZOD
-    original_to_training_mapping = np.full(max_original_value, 0, dtype=int)  # Default to 0 (background)
+    # Create mapping from dataset index to training index
+    # Default to 0 (background) for unmapped indices
+    dataset_to_train_mapping = np.zeros(max_dataset_index + 1, dtype=int)
     
-    for cls in classes:
-        original_annotation_value = cls['original_index']
-        config_index = cls['training_index']
-        training_index = config_index_to_training_index[config_index]
-        original_to_training_mapping[original_annotation_value] = training_index
+    for train_cls in train_classes:
+        train_index = train_cls['index']
+        for dataset_index in train_cls['dataset_mapping']:
+            dataset_to_train_mapping[dataset_index] = train_index
     
     # Apply mapping
-    relabeled = original_to_training_mapping[annotation]
+    relabeled = dataset_to_train_mapping[annotation]
     
     return torch.from_numpy(relabeled).unsqueeze(0).long()  # [H,W]->[1,H,W]
 
@@ -142,58 +68,32 @@ def draw_test_segmentation_map(outputs, config=None):
     
     Args:
         outputs: Model output tensor
-        config: Configuration dictionary with Dataset.classes. If None, uses hardcoded colors.
+        config: Configuration dictionary with Dataset.train_classes containing color field.
     """
     labels = torch.argmax(outputs.squeeze(), dim=0).detach().cpu().numpy()
     
     # Create color mapping based on config or use default
-    if config is not None:
-        classes = config['Dataset']['classes']
+    if config is not None and 'train_classes' in config.get('Dataset', {}):
+        train_classes = config['Dataset']['train_classes']
         
-        # Create mapping from training index to color index (original_index)
-        training_to_color_index = {}
-        for cls in classes:
-            training_index = cls['training_index']
-            color_index = cls['original_index']
-            training_to_color_index[training_index] = color_index
-        
-        # Create color list for training indices
-        unique_training_indices = sorted(training_to_color_index.keys())
+        # Create color list for training indices using colors from config
         color_list = []
-        
-        for training_index in unique_training_indices:
-            color_index = training_to_color_index[training_index]
-            if color_index < len(label_colors_list):
-                color_list.append(label_colors_list[color_index])
+        for cls in train_classes:
+            # Use color from config if available, otherwise use default
+            if 'color' in cls:
+                color_list.append(tuple(cls['color']))
             else:
-                # Fallback color
-                color_list.append((255, 255, 255))  # white
-        
-        # Dataset-specific color adjustments
-        if config.get('Dataset', {}).get('name') == 'waymo':
-            # For Waymo, set background to black, vehicle to red, cyclist + pedestrian to yellow
-            bg_training_index = None
-            vehicle_training_index = None
-            cyclist_ped_training_index = None
-            for cls in config['Dataset']['classes']:
+                # Fallback to hardcoded colors based on class name
                 if cls['name'] == 'background':
-                    bg_training_index = cls['training_index']
+                    color_list.append((0, 0, 0))  # Black
+                elif cls['name'] == 'sign':
+                    color_list.append((0, 0, 255))  # Blue
                 elif cls['name'] == 'vehicle':
-                    vehicle_training_index = cls['training_index']
-                elif cls['name'] == 'cyclist + pedestrian':
-                    cyclist_ped_training_index = cls['training_index']
-            if bg_training_index is not None and bg_training_index in unique_training_indices:
-                bg_idx = unique_training_indices.index(bg_training_index)
-                color_list[bg_idx] = (0, 0, 0)
-            if vehicle_training_index is not None and vehicle_training_index in unique_training_indices:
-                veh_idx = unique_training_indices.index(vehicle_training_index)
-                color_list[veh_idx] = (255, 0, 0)
-            if cyclist_ped_training_index is not None and cyclist_ped_training_index in unique_training_indices:
-                cp_idx = unique_training_indices.index(cyclist_ped_training_index)
-                color_list[cp_idx] = (255, 255, 0)
-    else:
-        # Use default hardcoded colors
-        color_list = label_colors_list
+                    color_list.append((128, 0, 128))  # Purple
+                elif cls['name'] == 'human':
+                    color_list.append((255, 255, 0))  # Yellow
+                else:
+                    color_list.append((255, 255, 255))  # White fallback
     
     red_map = np.zeros_like(labels).astype(np.uint8)
     green_map = np.zeros_like(labels).astype(np.uint8)
@@ -212,13 +112,14 @@ def image_overlay(image, segmented_image):
     """
     Create overlay with transparent masks on original image.
     Only predicted classes are shown with transparency, background remains original.
+    Both image and segmented_image should be in BGR format.
     """
     # Create a copy of the original image
     overlay = image.copy().astype(np.float32)
 
-    # Find non-black and non-background pixels in segmented image (predicted classes)
-    # Background (class 5 for Waymo) is cyan (255,255,0), ignore (class 0) is black (0,0,0)
-    mask = np.any(segmented_image != [0, 0, 0], axis=2) & np.any(segmented_image != [255, 255, 0], axis=2)
+    # Find non-black pixels in segmented image (predicted classes)
+    # Background is black [0, 0, 0] in BGR
+    mask = np.any(segmented_image != [0, 0, 0], axis=2)
 
     # Apply alpha blending only to predicted regions
     alpha = 0.6  # transparency level
@@ -231,7 +132,7 @@ def get_model_path(config):
     if model_path != '':
         return config['General']['model_path']
     # If model path not specified then take latest checkpoint
-    files = glob.glob(config['Log']['logdir']+'progress_save/*.pth')
+    files = glob.glob(config['Log']['logdir']+'checkpoints/*.pth')
     if len(files) == 0:
         return False
     # Sort by checkpoint number (not by file creation time which can be unreliable)
@@ -264,7 +165,7 @@ def save_model_dict(config, epoch, model, optimizer, epoch_uuid=None):
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict()},
-        config['Log']['logdir']+'progress_save/'+filename
+        config['Log']['logdir']+'checkpoints/'+filename
     )
 
 def adjust_learning_rate(config, optimizer, epoch):

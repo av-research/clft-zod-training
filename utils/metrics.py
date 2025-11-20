@@ -8,77 +8,41 @@ Created on June 18th, 2021
 import torch
 import numpy as np
 
-def zod_find_overlap_1(n_classes, output, anno):
+def find_overlap_exclude_bg_ignore(n_classes, output, anno):
     '''
-    ZOD-specific IoU calculation optimized for sparse annotations.
-    Key differences from standard version:
-    - More lenient evaluation for sparse datasets
-    - Different handling of ignore regions
-    - Focus on rare classes (cyclists, pedestrians)
+    Universal IoU calculation that excludes background class.
+    Works for both ZOD and Waymo datasets.
     
-    Evaluates classes based on relabeled indices after class merging.
-    :param n_classes: Number of unique classes after relabeling
-    :param output: 'fusion' output batch
-    :param anno: annotation batch (already relabeled)
-    :return: histogram statistic of overlap, prediction and annotation, union
+    Assumes:
+    - Class 0: background (excluded from evaluation)
+    - Classes 1+: evaluation classes
+    
+    :param n_classes: Total number of unique classes after relabeling
+    :param output: Model output batch (B, C, H, W)
+    :param anno: Annotation batch (B, H, W) - already relabeled
+    :return: histogram statistic of overlap, prediction, annotation, union
     '''
-    # After relabeling: 0->background, 1->vehicle, 2->sign/cyclist, 3->pedestrian
-    
     _, pred_indices = torch.max(output, dim=1)
 
-    # For relabeled annotations, background (0) should be ignored in IoU calculation
-    # Set predictions to 0 where annotation is 0 (background)
+    # Exclude background (0) from evaluation
+    # Set predictions to 0 where annotation is 0
     pred_indices[anno == 0] = 0
 
     # Calculate overlap where prediction matches annotation
     overlap = pred_indices * (pred_indices == anno).long()
 
-    # Calculate metrics for classes 1 to n_classes-1 (excluding background 0)
-    # For n_classes=4: evaluates classes 1-3 (vehicle, sign/cyclist, pedestrian)
+    # Calculate metrics for classes 1 to n_classes-1 (excluding background)
     num_eval_classes = n_classes - 1
-    area_overlap = torch.histc(overlap.float(), bins=num_eval_classes, max=num_eval_classes, min=1)
-    area_pred = torch.histc(pred_indices.float(), bins=num_eval_classes, max=num_eval_classes, min=1)
-    area_label = torch.histc(anno.float(), bins=num_eval_classes, max=num_eval_classes, min=1)
+    # Use bins from 0.5 to n_classes-0.5 to capture integer values 1 to n_classes-1
+    area_overlap = torch.histc(overlap.float(), bins=num_eval_classes, min=0.5, max=n_classes - 0.5)
+    area_pred = torch.histc(pred_indices.float(), bins=num_eval_classes, min=0.5, max=n_classes - 0.5)
+    area_label = torch.histc(anno.float(), bins=num_eval_classes, min=0.5, max=n_classes - 0.5)
     area_union = area_pred + area_label - area_overlap
 
-    # Add small epsilon to avoid division by zero in sparse cases
+    # Add small epsilon to avoid division by zero
     area_union = torch.clamp(area_union, min=1e-6)
 
     assert (area_overlap <= area_label + 1e-6).all(), "Intersection area should be smaller than Union area"
-
-    return area_overlap, area_pred, area_label, area_union
-
-def find_overlap_1(n_classes, output, anno):
-    '''
-    This is the function for the conference summary paper, ignore the car, consider pedestrian, cyclist and sign.
-    Modified to work with different scenarios.
-    :param n_classes: Number of classes
-    :param output: 'fusion' output batch (8, 4, 160, 480)
-    :param anno: annotation batch (8, 160, 480)
-    :return: histogram statistic of overlap, prediction and annotation, union
-    '''
-    # 0->background, then eval classes, then ignore as last class
-    num_eval_classes = n_classes - 2  # exclude background and ignore
-    
-    # Return each pixel value as class indices
-    _, pred_indices = torch.max(output, dim=1)  # (batch_size, H, W)
-
-    # If annotation is ignore (last class), set prediction to 0 (background) for IoU calculation
-    pred_indices[anno == (n_classes - 1)] = 0
-
-    # Calculate overlap where prediction matches annotation
-    overlap = pred_indices * (pred_indices == anno).long()
-
-    # Calculate metrics for eval classes (1 to num_eval_classes)
-    area_overlap = torch.histc(overlap.float(),
-                               bins=num_eval_classes, max=num_eval_classes, min=1)
-    area_pred = torch.histc(pred_indices.float(),
-                            bins=num_eval_classes, max=num_eval_classes, min=1)
-    area_label = torch.histc(anno.float(),
-                             bins=num_eval_classes, max=num_eval_classes, min=1)
-    area_union = area_pred + area_label - area_overlap
-
-    assert (area_overlap <= area_label).all(), "Intersection area should be smaller than Union area"
 
     return area_overlap, area_pred, area_label, area_union
 

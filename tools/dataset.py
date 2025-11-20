@@ -10,9 +10,7 @@ TODO: get the iseauto dataset dataloder part done.
 import os
 import sys
 import cv2
-import random
 import numpy as np
-from glob import glob
 from PIL import Image
 
 import torch
