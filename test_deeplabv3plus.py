@@ -1,0 +1,349 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Testing script for DeepLabV3+ models.
+"""
+import os
+import json
+import argparse
+import time
+import uuid
+import datetime
+import re
+import torch
+import numpy as np
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+from models.deeplabv3plus import build_deeplabv3plus
+from core.metrics_calculator import MetricsCalculator
+from utils.metrics import find_overlap_exclude_bg_ignore
+from utils.helpers import get_model_path
+from integrations.vision_service import send_test_results_from_file
+
+
+def calculate_num_classes(config):
+    """Calculate number of training classes."""
+    return len(config['Dataset']['train_classes'])
+
+
+def calculate_num_eval_classes(config, num_classes):
+    """Calculate number of evaluation classes (excludes background)."""
+    eval_count = sum(1 for cls in config['Dataset']['train_classes'] if cls['index'] > 0)
+    return eval_count
+
+
+def setup_dataset(config):
+    """Setup dataset based on configuration."""
+    if config['Dataset']['name'] == 'zod':
+        from tools.dataset_png import DatasetPNG as Dataset
+    else:
+        from tools.dataset import Dataset
+    return Dataset
+
+
+def relabel_classes(anno, config):
+    """Relabel ground truth annotations according to train_classes mapping."""
+    train_classes = config['Dataset']['train_classes']
+    relabeled = torch.zeros_like(anno)
+    
+    for train_cls in train_classes:
+        class_idx = train_cls['index']
+        dataset_indices = train_cls['dataset_mapping']
+        
+        for dataset_idx in dataset_indices:
+            relabeled[anno == dataset_idx] = class_idx
+    
+    return relabeled
+
+
+def test_model(model, dataloader, metrics_calc, device, config, num_classes, modality='rgb', is_fusion=False):
+    """Test the model on a dataset."""
+    model.eval()
+    
+    accumulators = metrics_calc.create_accumulators(device)
+    total_loss = 0.0
+    num_batches = 0
+    total_inference_time = 0.0
+    total_samples = 0
+    
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc="Testing"):
+            rgb = batch['rgb'].to(device)
+            anno = batch['anno'].to(device)
+            
+            # Relabel annotations
+            anno = relabel_classes(anno, config)
+            
+            # Synchronize for accurate timing
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            
+            # Time the forward pass
+            inference_start = time.time()
+            
+            if is_fusion:
+                lidar = batch['lidar'].to(device)
+                pred, _, _ = model(rgb, lidar)
+            else:
+                if modality == 'rgb':
+                    pred = model(rgb)
+                else:  # lidar
+                    lidar = batch['lidar'].to(device)
+                    pred = model(lidar)
+            
+            # Synchronize and record time
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            inference_time = time.time() - inference_start
+            total_inference_time += inference_time
+            total_samples += rgb.size(0)
+            
+            # Update metrics (pass raw predictions, not argmax)
+            metrics_calc.update_accumulators(accumulators, pred, anno, num_classes)
+            num_batches += 1
+    
+    # Compute metrics
+    metrics = metrics_calc.compute_epoch_metrics(accumulators, total_loss, num_batches)
+    
+    # Add inference time statistics
+    metrics['inference_time'] = {
+        'total_seconds': round(total_inference_time, 2),
+        'samples': total_samples,
+        'batches': num_batches,
+        'avg_per_sample_ms': round((total_inference_time / total_samples) * 1000, 2) if total_samples > 0 else 0,
+        'avg_per_batch_ms': round((total_inference_time / num_batches) * 1000, 2) if num_batches > 0 else 0,
+        'throughput_fps': round(total_samples / total_inference_time, 2) if total_inference_time > 0 else 0
+    }
+    
+    return metrics
+
+
+def print_metrics(metrics, dataset_name, class_names):
+    """Print test metrics."""
+    print(f"\n{'='*60}")
+    print(f"{dataset_name} Results")
+    print(f"{'='*60}")
+    print(f"mIoU: {metrics['mean_iou']:.4f}")
+    print(f"Mean Precision: {torch.mean(metrics['precision']).item():.4f}")
+    print(f"Mean Recall: {torch.mean(metrics['recall']).item():.4f}")
+    print(f"Mean F1: {torch.mean(metrics['f1']).item():.4f}")
+    
+    if 'inference_time' in metrics:
+        inf_time = metrics['inference_time']
+        print(f"\nInference Performance:")
+        print(f"  Avg time per sample: {inf_time['avg_per_sample_ms']:.2f} ms")
+        print(f"  Avg time per batch: {inf_time['avg_per_batch_ms']:.2f} ms")
+        print(f"  Throughput: {inf_time['throughput_fps']:.2f} FPS")
+    
+    print("\nPer-class Metrics:")
+    for i, class_name in enumerate(class_names):
+        iou = metrics['epoch_IoU'][i].item()
+        prec = metrics['precision'][i].item()
+        rec = metrics['recall'][i].item()
+        f1 = metrics['f1'][i].item()
+        print(f"  {class_name}: IoU={iou:.4f}, Prec={prec:.4f}, Rec={rec:.4f}, F1={f1:.4f}")
+
+
+def extract_epoch_info(model_path):
+    """Extract epoch number and UUID from model path."""
+    epoch_match = re.search(r'epoch_(\d+)_([a-f0-9\-]+)\.pth', model_path)
+    if epoch_match:
+        return int(epoch_match.group(1)), epoch_match.group(2)
+    
+    # Fallback for old checkpoint format
+    epoch_match = re.search(r'checkpoint_(\d+)\.pth', model_path)
+    if epoch_match:
+        return int(epoch_match.group(1)), None
+    
+    # Fallback for best_model format
+    best_match = re.search(r'best_model_([a-f0-9\-]+)\.pth', model_path)
+    if best_match:
+        return 0, best_match.group(1)
+    
+    return 0, None
+
+
+def convert_metrics_to_serializable(metrics, config, num_eval_classes):
+    """Convert metrics to JSON-serializable format."""
+    train_classes = config['Dataset']['train_classes']
+    class_names = [cls['name'] for cls in train_classes if cls['index'] > 0]
+    
+    serializable = {
+        'mean_iou': float(metrics['mean_iou']),
+        'mean_precision': float(torch.mean(metrics['precision']).item()),
+        'mean_recall': float(torch.mean(metrics['recall']).item()),
+        'mean_f1': float(torch.mean(metrics['f1']).item())
+    }
+    
+    # Add per-class metrics
+    for i in range(num_eval_classes):
+        class_name = class_names[i] if i < len(class_names) else f'class_{i+1}'
+        serializable[class_name] = {
+            'iou': float(metrics['epoch_IoU'][i].item()),
+            'precision': float(metrics['precision'][i].item()),
+            'recall': float(metrics['recall'][i].item()),
+            'f1': float(metrics['f1'][i].item())
+        }
+    
+    # Add inference time if present
+    if 'inference_time' in metrics:
+        serializable['inference_time'] = metrics['inference_time']
+    
+    return serializable
+
+
+def save_test_results(config, all_results, epoch_num, epoch_uuid, test_uuid):
+    """Save test results to JSON file."""
+    combined_results = {
+        'timestamp': datetime.datetime.now().isoformat(),
+        'model': 'deeplabv3plus',
+        'mode': config['CLI']['mode'],
+        'fusion_type': config['DeepLabV3Plus'].get('fusion_type', 'N/A'),
+        'epoch': epoch_num,
+        'epoch_uuid': epoch_uuid,
+        'test_uuid': test_uuid,
+        'test_results': all_results
+    }
+    
+    # Create results directory
+    output_dir = config['Log']['logdir']
+    test_results_dir = os.path.join(output_dir, 'test_results')
+    os.makedirs(test_results_dir, exist_ok=True)
+    
+    # Generate filename
+    if epoch_uuid:
+        filename = f'deeplabv3plus_epoch_{epoch_num}_{epoch_uuid}.json'
+    else:
+        filename = f'deeplabv3plus_epoch_{epoch_num}_test_results.json'
+    
+    filepath = os.path.join(test_results_dir, filename)
+    
+    # Save to file
+    with open(filepath, 'w') as f:
+        json.dump(combined_results, f, indent=2)
+    
+    print(f'\n{"="*60}')
+    print(f'Test results saved to: {filepath}')
+    if epoch_uuid:
+        print(f'Epoch UUID: {epoch_uuid}')
+    print(f'Test UUID: {test_uuid}')
+    print(f'{"="*60}')
+    
+    return filepath
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Test DeepLabV3+ Model')
+    parser.add_argument('-c', '--config', type=str, required=True,
+                       help='Path to config file')
+    parser.add_argument('--checkpoint', type=str, default=None,
+                       help='Path to checkpoint file (optional, uses best from config if not specified)')
+    args = parser.parse_args()
+    
+    # Load configuration
+    with open(args.config, 'r') as f:
+        config = json.load(f)
+    
+    # Setup device
+    device = torch.device(config['General']['device'] 
+                         if torch.cuda.is_available() else "cpu")
+    print(f"Device: {device}")
+    
+    # Calculate class counts
+    num_classes = calculate_num_classes(config)
+    num_eval_classes = calculate_num_eval_classes(config, num_classes)
+    print(f"Total classes: {num_classes}, Evaluation classes: {num_eval_classes}")
+    
+    # Determine mode and fusion type
+    modality = config['CLI']['mode']
+    fusion_type = config['DeepLabV3Plus'].get('fusion_type', 'learned')
+    is_fusion = modality == 'fusion'
+    
+    # Build model
+    model = build_deeplabv3plus(
+        num_classes=num_classes,
+        mode=modality,
+        fusion_type=fusion_type,
+        pretrained=False  # Don't load ImageNet weights for testing
+    )
+    model.to(device)
+    
+    # Load checkpoint
+    if args.checkpoint:
+        checkpoint_path = args.checkpoint
+    else:
+        checkpoint_path = get_model_path(config)
+        if not checkpoint_path:
+            print("Error: No checkpoint found. Please specify --checkpoint")
+            return
+    
+    print(f"Loading checkpoint: {checkpoint_path}")
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    
+    # Extract epoch info from checkpoint
+    epoch_num, epoch_uuid = extract_epoch_info(checkpoint_path)
+    test_uuid = str(uuid.uuid4())
+    
+    # Setup metrics calculator
+    find_overlap_func = find_overlap_exclude_bg_ignore
+    metrics_calc = MetricsCalculator(config, num_eval_classes, find_overlap_func)
+    
+    # Setup datasets
+    Dataset = setup_dataset(config)
+    
+    # Get class names for display
+    train_classes = config['Dataset']['train_classes']
+    class_names = [cls['name'] for cls in train_classes if cls['index'] > 0]
+    
+    # Dictionary to collect all results
+    all_results = {}
+    
+    # Define test data path and files
+    test_data_path = config['CLI']['path']
+    test_data_files = [
+        ('day_fair', 'test_day_fair.txt'),
+        ('day_rain', 'test_day_rain.txt'),
+        ('night_fair', 'test_night_fair.txt'),
+        ('night_rain', 'test_night_rain.txt')
+    ]
+    
+    # Test on each weather condition
+    for condition_key, filename in test_data_files:
+        filepath = os.path.join(test_data_path, filename)
+        if not os.path.exists(filepath):
+            print(f"\nSkipping {condition_key}: file not found ({filepath})")
+            continue
+        
+        condition_name = condition_key.replace('_', ' ').title()
+        print(f"\nTesting on {condition_name}...")
+        print(f"Using file: {filepath}")
+        
+        test_data = Dataset(config, 'test', filepath)
+        test_dataloader = DataLoader(
+            test_data,
+            batch_size=config['General']['batch_size'],
+            shuffle=False,
+            pin_memory=True,
+            num_workers=4
+        )
+        
+        test_metrics = test_model(model, test_dataloader, metrics_calc, device, config, num_classes, modality, is_fusion)
+        print_metrics(test_metrics, condition_name, class_names)
+        all_results[condition_key] = convert_metrics_to_serializable(test_metrics, config, num_eval_classes)
+    
+    # Save all results to JSON
+    results_file = save_test_results(config, all_results, epoch_num, epoch_uuid, test_uuid)
+    
+    # Upload to vision service
+    print("\nUploading test results to vision service...")
+    upload_success = send_test_results_from_file(results_file)
+    if upload_success:
+        print("✅ Test results successfully uploaded to vision service")
+    else:
+        print("❌ Failed to upload test results to vision service")
+
+
+if __name__ == '__main__':
+    main()

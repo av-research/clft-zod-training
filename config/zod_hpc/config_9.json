@@ -41,7 +41,7 @@
     "Dataset": {
         "name": "zod",
         "dataset_root": "/gpfs/mariana/smbhome/totahv/clft-zod-training/zod_dataset/",
-        "annotation_path": "annotation_lidar_only",
+        "annotation_path": "annotation_fusion",
         "train_split": "/gpfs/mariana/smbhome/totahv/clft-zod-training/zod_dataset/train.txt",
         "val_split": "/gpfs/mariana/smbhome/totahv/clft-zod-training/zod_dataset/validation.txt",
         "splits": {

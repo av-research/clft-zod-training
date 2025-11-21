@@ -1,0 +1,455 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Training script for DeepLabV3+ baseline comparison.
+Supports RGB-only and late-fusion modes.
+"""
+import os
+import json
+import glob
+import argparse
+import multiprocessing
+import time
+import torch
+import torch.nn as nn
+import numpy as np
+from torch.utils.data import DataLoader
+
+from models.deeplabv3plus import build_deeplabv3plus
+from core.metrics_calculator import MetricsCalculator
+from utils.metrics import find_overlap_exclude_bg_ignore
+from integrations.training_logger import generate_training_uuid, log_epoch_results
+from integrations.vision_service import create_training, create_config, get_training_by_uuid, send_epoch_results_from_file
+from utils.helpers import get_model_path
+from utils.system_monitor import get_epoch_system_snapshot, print_system_info, get_system_info
+
+
+def calculate_num_classes(config):
+    """Calculate number of training classes."""
+    return len(config['Dataset']['train_classes'])
+
+
+def calculate_num_eval_classes(config, num_classes):
+    """Calculate number of evaluation classes (excludes background)."""
+    eval_count = sum(1 for cls in config['Dataset']['train_classes'] if cls['index'] > 0)
+    return eval_count
+
+
+def setup_dataset(config):
+    """Setup dataset based on configuration."""
+    if config['Dataset']['name'] == 'zod':
+        from tools.dataset_png import DatasetPNG as Dataset
+    else:
+        from tools.dataset import Dataset
+    return Dataset
+
+
+def setup_criterion(config):
+    """Setup loss criterion with class weights."""
+    train_classes = config['Dataset']['train_classes']
+    sorted_classes = sorted(train_classes, key=lambda x: x['index'])
+    class_weights = [cls['weight'] for cls in sorted_classes]
+    
+    weight_loss = torch.Tensor(class_weights)
+    print(f"Using class weights: {class_weights}")
+    print(f"For classes: {[cls['name'] for cls in sorted_classes]}")
+    
+    return nn.CrossEntropyLoss(weight=weight_loss)
+
+
+def setup_vision_service(config, training_uuid):
+    """Setup vision service integration."""
+    model_name = config['CLI']['backbone']
+    dataset_name = config['Dataset']['name']
+    description = config.get('Summary', f"Training {model_name} on {dataset_name} dataset")
+    tags = config.get('tags', [])
+    
+    config_name = f"{dataset_name} - {model_name} Config"
+    vision_config_id = create_config(name=config_name, config_data=config)
+    
+    if vision_config_id:
+        print(f"Created config in vision service: {vision_config_id}")
+        vision_training_id = create_training(
+            uuid=training_uuid,
+            name=description,
+            model=model_name,
+            dataset=dataset_name,
+            description='',
+            tags=tags,
+            config_id=vision_config_id
+        )
+        
+        if vision_training_id:
+            print(f"Created training in vision service: {vision_training_id}")
+            return vision_training_id
+    
+    return None
+
+
+def get_training_uuid_from_logs(log_dir):
+    """Extract training_uuid from existing epoch log files."""
+    epochs_dir = os.path.join(log_dir, 'epochs')
+    if not os.path.exists(epochs_dir):
+        return None
+    
+    epoch_files = glob.glob(os.path.join(epochs_dir, 'epoch_*.json'))
+    if not epoch_files:
+        return None
+    
+    epoch_files.sort()
+    latest_epoch_file = epoch_files[-1]
+    
+    try:
+        with open(latest_epoch_file, 'r') as f:
+            epoch_data = json.load(f)
+        training_uuid = epoch_data.get('training_uuid')
+        if training_uuid:
+            print(f"Found existing training_uuid from logs: {training_uuid}")
+            return training_uuid
+    except Exception as e:
+        print(f"Warning: Could not read training_uuid from {latest_epoch_file}: {e}")
+    
+    return None
+
+
+def relabel_classes(anno, config):
+    """Relabel ground truth annotations according to train_classes mapping."""
+    train_classes = config['Dataset']['train_classes']
+    relabeled = torch.zeros_like(anno)
+    
+    for train_cls in train_classes:
+        class_idx = train_cls['index']
+        dataset_indices = train_cls['dataset_mapping']
+        
+        for dataset_idx in dataset_indices:
+            relabeled[anno == dataset_idx] = class_idx
+    
+    return relabeled
+
+
+def train_epoch(model, dataloader, criterion, optimizer, metrics_calc, device, config, 
+                num_classes, modality='rgb', is_fusion=False):
+    """Train for one epoch."""
+    model.train()
+    total_loss = 0.0
+    num_batches = 0
+    
+    accumulators = metrics_calc.create_accumulators(device)
+    
+    for batch in dataloader:
+        rgb = batch['rgb'].to(device)
+        anno = batch['anno'].to(device)
+        
+        # Relabel annotations
+        anno = relabel_classes(anno, config)
+        
+        optimizer.zero_grad()
+        
+        if is_fusion:
+            lidar = batch['lidar'].to(device)
+            pred, rgb_pred, lidar_pred = model(rgb, lidar)
+            loss = criterion(pred, anno)
+        else:
+            if modality == 'rgb':
+                pred = model(rgb)
+            else:  # lidar
+                lidar = batch['lidar'].to(device)
+                pred = model(lidar)
+            loss = criterion(pred, anno)
+        
+        loss.backward()
+        optimizer.step()
+        
+        total_loss += loss.item()
+        num_batches += 1
+        
+        # Update metrics (pass raw predictions, not argmax)
+        metrics_calc.update_accumulators(accumulators, pred, anno, num_classes)
+    
+    # Compute epoch metrics
+    metrics = metrics_calc.compute_epoch_metrics(accumulators, total_loss, num_batches)
+    return metrics
+
+
+def validate_epoch(model, dataloader, criterion, metrics_calc, device, config, 
+                   num_classes, modality='rgb', is_fusion=False):
+    """Validate for one epoch."""
+    model.eval()
+    total_loss = 0.0
+    num_batches = 0
+    
+    accumulators = metrics_calc.create_accumulators(device)
+    
+    with torch.no_grad():
+        for batch in dataloader:
+            rgb = batch['rgb'].to(device)
+            anno = batch['anno'].to(device)
+            
+            # Relabel annotations
+            anno = relabel_classes(anno, config)
+            
+            if is_fusion:
+                lidar = batch['lidar'].to(device)
+                pred, _, _ = model(rgb, lidar)
+            else:
+                if modality == 'rgb':
+                    pred = model(rgb)
+                else:  # lidar
+                    lidar = batch['lidar'].to(device)
+                    pred = model(lidar)
+            
+            loss = criterion(pred, anno)
+            total_loss += loss.item()
+            num_batches += 1
+            
+            # Update metrics (pass raw predictions, not argmax)
+            metrics_calc.update_accumulators(accumulators, pred, anno, num_classes)
+    
+    # Compute epoch metrics
+    metrics = metrics_calc.compute_epoch_metrics(accumulators, total_loss, num_batches)
+    return metrics
+
+
+def save_checkpoint(model, optimizer, epoch, config, log_dir, epoch_uuid):
+    """Save model checkpoint."""
+    checkpoint_dir = os.path.join(log_dir, 'checkpoints')
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    
+    checkpoint_path = os.path.join(checkpoint_dir, f'epoch_{epoch}_{epoch_uuid}.pth')
+    
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'config': config
+    }, checkpoint_path)
+    
+    print(f"Saved checkpoint: {checkpoint_path}")
+
+
+def load_checkpoint_if_resume(config, model, optimizer, device):
+    """Load checkpoint if resuming training."""
+    if not config['General']['resume_training']:
+        print('Training from the beginning')
+        return 0
+    
+    model_path = get_model_path(config)
+    if not model_path:
+        print('No checkpoint found, training from beginning')
+        return 0
+    
+    print(f'Resuming training from {model_path}')
+    checkpoint = torch.load(model_path, map_location=device)
+    
+    if config['General']['reset_lr']:
+        print('Reset the epoch to 0')
+        return 0
+    
+    finished_epochs = checkpoint['epoch']
+    print(f"Finished epochs in previous training: {finished_epochs}")
+    
+    if config['General']['epochs'] <= finished_epochs:
+        print(f'Error: Current epochs ({config["General"]["epochs"]}) <= finished epochs ({finished_epochs})')
+        print(f"Please set epochs > {finished_epochs}")
+        exit(1)
+    
+    print('Loading trained model weights...')
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.to(device)
+    
+    print('Loading trained optimizer...')
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    
+    return finished_epochs
+
+
+def main():
+    parser = argparse.ArgumentParser(description='DeepLabV3+ Training')
+    parser.add_argument('-c', '--config', type=str, required=False, 
+                       default='config.json', help='Path to config file')
+    args = parser.parse_args()
+    
+    # Load configuration
+    with open(args.config, 'r') as f:
+        config = json.load(f)
+    
+    # Set random seed
+    np.random.seed(config['General']['seed'])
+    multiprocessing.set_start_method('spawn', force=True)
+    
+    # Generate or retrieve training UUID
+    if config['General']['resume_training']:
+        training_uuid = get_training_uuid_from_logs(config['Log']['logdir'])
+        if training_uuid:
+            print(f"Resuming training with existing UUID: {training_uuid}")
+        else:
+            print("Warning: Could not find existing training_uuid, generating new one")
+            training_uuid = generate_training_uuid()
+    else:
+        training_uuid = generate_training_uuid()
+        print(f"Training UUID: {training_uuid}")
+    
+    # Setup device
+    device = torch.device(config['General']['device'] 
+                         if torch.cuda.is_available() else "cpu")
+    print(f"Device: {device}")
+    
+    # Print system information
+    print_system_info()
+    
+    # Calculate class counts
+    num_classes = calculate_num_classes(config)
+    num_eval_classes = calculate_num_eval_classes(config, num_classes)
+    print(f"Total classes: {num_classes}, Evaluation classes: {num_eval_classes}")
+    
+    # Determine mode and fusion type
+    modality = config['CLI']['mode']
+    fusion_type = config['DeepLabV3Plus'].get('fusion_type', 'learned')
+    is_fusion = modality == 'fusion'
+    
+    # Build model
+    model = build_deeplabv3plus(
+        num_classes=num_classes,
+        mode=modality,
+        fusion_type=fusion_type,
+        pretrained=True
+    )
+    model.to(device)
+    
+    # Setup optimizer
+    lr = config['DeepLabV3Plus'].get('learning_rate', 1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    
+    # Setup criterion
+    criterion = setup_criterion(config)
+    criterion.to(device)
+    
+    # Setup metrics calculator
+    find_overlap_func = find_overlap_exclude_bg_ignore
+    metrics_calc = MetricsCalculator(config, num_eval_classes, find_overlap_func)
+    
+    # Setup vision service
+    vision_training_id = None
+    if training_uuid:
+        if config['General']['resume_training']:
+            vision_training_id = get_training_by_uuid(training_uuid)
+            if vision_training_id:
+                print(f"Found existing training in vision service: {vision_training_id}")
+        else:
+            vision_training_id = setup_vision_service(config, training_uuid)
+    
+    # Load checkpoint if resuming
+    start_epoch = load_checkpoint_if_resume(config, model, optimizer, device)
+    
+    # Setup datasets
+    Dataset = setup_dataset(config)
+    train_data = Dataset(config, 'train', config['Dataset']['train_split'])
+    valid_data = Dataset(config, 'val', config['Dataset']['val_split'])
+    
+    train_dataloader = DataLoader(
+        train_data,
+        batch_size=config['General']['batch_size'],
+        shuffle=True,
+        pin_memory=True,
+        drop_last=True,
+        num_workers=4,
+        persistent_workers=True
+    )
+    
+    valid_dataloader = DataLoader(
+        valid_data,
+        batch_size=config['General']['batch_size'],
+        shuffle=False,
+        pin_memory=True,
+        drop_last=True,
+        num_workers=2,
+        persistent_workers=True
+    )
+    
+    # Training loop
+    log_dir = config['Log']['logdir']
+    os.makedirs(log_dir, exist_ok=True)
+    
+    best_val_iou = 0.0
+    patience_counter = 0
+    early_stop_patience = config['General']['early_stop_patience']
+    
+    for epoch in range(start_epoch, config['General']['epochs']):
+        print(f"{'='*60}")
+        print(f"Epoch {epoch + 1}/{config['General']['epochs']}")
+        print(f"{'='*60}")
+        
+        epoch_start_time = time.time()
+        
+        # Train
+        train_metrics = train_epoch(model, train_dataloader, criterion, optimizer, 
+                                    metrics_calc, device, config, num_classes, modality, is_fusion)
+        print(f"Train Loss: {train_metrics['epoch_loss']:.4f}")
+        print(f"Train mIoU: {train_metrics['mean_iou']:.4f}")
+        
+        # Validate
+        val_metrics = validate_epoch(model, valid_dataloader, criterion, 
+                                     metrics_calc, device, config, num_classes, modality, is_fusion)
+        
+        print(f"Val Loss: {val_metrics['epoch_loss']:.4f}")
+        print(f"Val mIoU: {val_metrics['mean_iou']:.4f}")
+        
+        epoch_time = time.time() - epoch_start_time
+        print(f"Epoch time: {epoch_time:.2f}s")
+        
+        # Get system resource snapshot
+        system_snapshot = get_epoch_system_snapshot()
+        
+        # Log epoch with CLFT-style format
+        results_dict = metrics_calc.prepare_results_dict(train_metrics, val_metrics)
+        
+        epoch_file = log_epoch_results(
+            epoch=epoch,
+            training_uuid=training_uuid,
+            results=results_dict,
+            log_dir=log_dir,
+            learning_rate=optimizer.param_groups[0]['lr'],
+            epoch_time=epoch_time,
+            system_info=system_snapshot
+        )
+        
+        # Extract epoch_uuid from the logged file path
+        epoch_uuid = os.path.basename(epoch_file).replace(f'epoch_{epoch}_', '').replace('.json', '')
+        
+        # Send to vision service if available
+        if vision_training_id:
+            send_epoch_results_from_file(vision_training_id, epoch, epoch_file)
+        
+        # Save checkpoint
+        if (epoch + 1) % config['General']['save_epoch'] == 0 or epoch == config['General']['epochs'] - 1:
+            save_checkpoint(model, optimizer, epoch, config, log_dir, epoch_uuid)
+        
+        # Early stopping
+        if val_metrics['mean_iou'] > best_val_iou:
+            best_val_iou = val_metrics['mean_iou']
+            patience_counter = 0
+            # Save best model
+            checkpoint_dir = os.path.join(log_dir, 'checkpoints')
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            best_path = os.path.join(checkpoint_dir, f'best_model_{epoch_uuid}.pth')
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'config': config,
+                'mean_iou': best_val_iou
+            }, best_path)
+            print(f"Saved new best model with mIoU: {best_val_iou:.4f}")
+        else:
+            patience_counter += 1
+            print(f"No improvement. Patience: {patience_counter}/{early_stop_patience}")
+            
+            if patience_counter >= early_stop_patience:
+                print(f"Early stopping triggered after {epoch + 1} epochs")
+                break
+    
+    print(f"\nTraining completed! Best validation mIoU: {best_val_iou:.4f}")
+
+
+if __name__ == '__main__':
+    main()
