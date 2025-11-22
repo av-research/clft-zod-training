@@ -72,14 +72,14 @@ class TestingEngine:
                 anno = relabel_annotation(anno.cpu(), self.config).squeeze(0).to(self.device)
                 
                 # Update accumulators
-                batch_overlap, batch_union = self.metrics_calc.update_accumulators(
+                batch_overlap, batch_pred, batch_label, batch_union = self.metrics_calc.update_accumulators(
                     accumulators, output_seg, anno, num_classes
                 )
                 
-                # Calculate batch metrics for AP
+                # Calculate batch metrics for AP (use batch-specific values)
                 batch_IoU = 1.0 * batch_overlap / (np.spacing(1) + batch_union)
-                batch_precision = 1.0 * batch_overlap / (np.spacing(1) + accumulators['pred'])
-                batch_recall = 1.0 * batch_overlap / (np.spacing(1) + accumulators['label'])
+                batch_precision = 1.0 * batch_overlap / (np.spacing(1) + batch_pred)
+                batch_recall = 1.0 * batch_overlap / (np.spacing(1) + batch_label)
                 
                 # Store metrics for eval classes
                 array_indices = self._get_array_indices()

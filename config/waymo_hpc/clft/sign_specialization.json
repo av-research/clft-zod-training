@@ -1,14 +1,14 @@
 {
-    "Summary": "Waymo Lidar Hybrid",
-    "tags": ["Waymo", "HPC", "CLFT-Hybrid", "Lidar"],
+    "Summary": "Waymo RGB Hybrid - Sign Specialization",
+    "tags": ["Waymo", "HPC", "CLFT-Hybrid", "RGB", "Sign-Only", "Specialization"],
     "CLI": {
         "backbone": "clft",
-        "mode": "lidar",
+        "mode": "rgb",
         "path": "./waymo_dataset/splits_clft/"
     },
     "General": {
         "device": "cuda:0",
-        "epochs": 100,
+        "epochs": 50,
         "batch_size": 24,
         "path_predicted_images": "output",
         "seed": 0,
@@ -19,7 +19,7 @@
         "model_path": ""
     },
     "Log": {
-        "logdir": "/gpfs/mariana/smbhome/totahv/waymo_logs/config_5/"
+        "logdir": "/gpfs/mariana/smbhome/totahv/waymo_logs/sign_specialization/"
     },
     "CLFT": {
         "emb_dim": 768,
@@ -70,10 +70,8 @@
             {"name": "background","index": 5}
         ],
         "train_classes": [
-            {"name": "background","index": 0,"weight": 0.5,"dataset_mapping": [0,5],"color": [0,0,0]},
-            {"name": "vehicle","index": 1,"weight": 4.0,"dataset_mapping": [1],"color": [128,0,128]},
-            {"name": "sign","index": 2,"weight": 10.0,"dataset_mapping": [3],"color": [255,0,0]},
-            {"name": "human","index": 3,"weight": 4.0,"dataset_mapping": [2,4],"color": [0,255,255]}
+            {"name": "background","index": 0,"weight": 0.5,"dataset_mapping": [0,1,2,4,5],"color": [0,0,0]},
+            {"name": "sign","index": 1,"weight": 20.0,"dataset_mapping": [3],"color": [255,0,0]}
         ]
     }
 }

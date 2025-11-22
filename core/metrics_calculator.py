@@ -58,7 +58,7 @@ class MetricsCalculator:
         accumulators['label'] += batch_label
         accumulators['union'] += batch_union
         
-        return batch_overlap, batch_union
+        return batch_overlap, batch_pred, batch_label, batch_union
     
     def compute_epoch_metrics(self, accumulators, total_loss, num_batches):
         """Compute final metrics for an epoch."""

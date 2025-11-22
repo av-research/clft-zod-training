@@ -1,14 +1,14 @@
 {
-    "Summary": "Waymo Fusion Base",
-    "tags": ["Waymo", "HPC", "CLFT-Base", "Fusion"],
+    "Summary": "Waymo RGB Hybrid - Vehicle + Sign",
+    "tags": ["Waymo", "HPC", "CLFT-Hybrid", "RGB", "Vehicle-Sign", "Specialization"],
     "CLI": {
         "backbone": "clft",
-        "mode": "cross_fusion",
+        "mode": "rgb",
         "path": "./waymo_dataset/splits_clft/"
     },
     "General": {
         "device": "cuda:0",
-        "epochs": 100,
+        "epochs": 50,
         "batch_size": 24,
         "path_predicted_images": "output",
         "seed": 0,
@@ -19,12 +19,12 @@
         "model_path": ""
     },
     "Log": {
-        "logdir": "/gpfs/mariana/smbhome/totahv/waymo_logs/config_7/"
+        "logdir": "/gpfs/mariana/smbhome/totahv/waymo_logs/vehicle_sign/"
     },
     "CLFT": {
         "emb_dim": 768,
         "hooks": [2, 5, 8, 11],
-        "model_timm": "vit_base_patch16_384",
+        "model_timm": "vit_base_resnet50_384",
         "clft_lr": 8e-05,
         "patch_size": 16,
         "reassembles": [4, 8, 16, 32],
@@ -70,10 +70,9 @@
             {"name": "background","index": 5}
         ],
         "train_classes": [
-            {"name": "background","index": 0,"weight": 0.5,"dataset_mapping": [0,5],"color": [0,0,0]},
-            {"name": "vehicle","index": 1,"weight": 4.0,"dataset_mapping": [1],"color": [128,0,128]},
-            {"name": "sign","index": 2,"weight": 10.0,"dataset_mapping": [3],"color": [255,0,0]},
-            {"name": "human","index": 3,"weight": 4.0,"dataset_mapping": [2,4],"color": [0,255,255]}
+            {"name": "background","index": 0,"weight": 0.5,"dataset_mapping": [0,2,4,5],"color": [0,0,0]},
+            {"name": "vehicle","index": 1,"weight": 10.0,"dataset_mapping": [1],"color": [128,0,128]},
+            {"name": "sign","index": 2,"weight": 15.0,"dataset_mapping": [3],"color": [255,0,0]}
         ]
     }
 }

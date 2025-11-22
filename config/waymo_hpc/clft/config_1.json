@@ -1,6 +1,6 @@
 {
-    "Summary": "Waymo RGB Hybrid",
-    "tags": ["Waymo", "HPC", "CLFT-Hybrid", "RGB"],
+    "Summary": "Waymo RGB Base",
+    "tags": ["Waymo", "HPC", "CLFT-Base", "RGB"],
     "CLI": {
         "backbone": "clft",
         "mode": "rgb",
@@ -8,23 +8,23 @@
     },
     "General": {
         "device": "cuda:0",
-        "epochs": 100,
+        "epochs": 50,
         "batch_size": 24,
         "path_predicted_images": "output",
         "seed": 0,
-        "resume_training": true,
+        "resume_training": false,
         "reset_lr": false,
         "early_stop_patience": 200,
         "save_epoch": 20,
         "model_path": ""
     },
     "Log": {
-        "logdir": "/gpfs/mariana/smbhome/totahv/waymo_logs/config_2/"
+        "logdir": "/gpfs/mariana/smbhome/totahv/waymo_logs/config_1/"
     },
     "CLFT": {
         "emb_dim": 768,
         "hooks": [2, 5, 8, 11],
-        "model_timm": "vit_base_resnet50_384",
+        "model_timm": "vit_base_patch16_384",
         "clft_lr": 8e-05,
         "patch_size": 16,
         "reassembles": [4, 8, 16, 32],

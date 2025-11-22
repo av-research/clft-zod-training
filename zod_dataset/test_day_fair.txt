@@ -68,6 +68,7 @@ camera/frame_006740.png
 camera/frame_006746.png
 camera/frame_006758.png
 camera/frame_006820.png
+camera/frame_006850.png
 camera/frame_006865.png
 camera/frame_006881.png
 camera/frame_006883.png
@@ -108,6 +109,7 @@ camera/frame_008965.png
 camera/frame_009000.png
 camera/frame_009084.png
 camera/frame_009179.png
+camera/frame_009217.png
 camera/frame_009273.png
 camera/frame_009324.png
 camera/frame_009411.png
@@ -287,6 +289,7 @@ camera/frame_014815.png
 camera/frame_014856.png
 camera/frame_014998.png
 camera/frame_015025.png
+camera/frame_015026.png
 camera/frame_015300.png
 camera/frame_015310.png
 camera/frame_015329.png
@@ -357,6 +360,7 @@ camera/frame_021227.png
 camera/frame_021261.png
 camera/frame_021299.png
 camera/frame_021338.png
+camera/frame_021386.png
 camera/frame_021406.png
 camera/frame_021670.png
 camera/frame_021725.png
@@ -366,6 +370,7 @@ camera/frame_021899.png
 camera/frame_021987.png
 camera/frame_021993.png
 camera/frame_022095.png
+camera/frame_022105.png
 camera/frame_022142.png
 camera/frame_022228.png
 camera/frame_022260.png
@@ -450,6 +455,7 @@ camera/frame_027308.png
 camera/frame_027355.png
 camera/frame_027481.png
 camera/frame_027593.png
+camera/frame_027793.png
 camera/frame_027800.png
 camera/frame_027993.png
 camera/frame_028039.png
@@ -560,6 +566,7 @@ camera/frame_034121.png
 camera/frame_034136.png
 camera/frame_034213.png
 camera/frame_034226.png
+camera/frame_034247.png
 camera/frame_034314.png
 camera/frame_034352.png
 camera/frame_034358.png
@@ -576,6 +583,7 @@ camera/frame_035264.png
 camera/frame_035372.png
 camera/frame_035397.png
 camera/frame_035443.png
+camera/frame_035517.png
 camera/frame_035559.png
 camera/frame_035606.png
 camera/frame_035634.png
@@ -691,6 +699,7 @@ camera/frame_044067.png
 camera/frame_044078.png
 camera/frame_044132.png
 camera/frame_044285.png
+camera/frame_044361.png
 camera/frame_044403.png
 camera/frame_044524.png
 camera/frame_044582.png
@@ -719,6 +728,7 @@ camera/frame_046599.png
 camera/frame_047099.png
 camera/frame_047164.png
 camera/frame_047283.png
+camera/frame_047335.png
 camera/frame_047364.png
 camera/frame_047483.png
 camera/frame_047674.png
@@ -730,6 +740,7 @@ camera/frame_047936.png
 camera/frame_048300.png
 camera/frame_048337.png
 camera/frame_048685.png
+camera/frame_048792.png
 camera/frame_048876.png
 camera/frame_048935.png
 camera/frame_049323.png
@@ -852,6 +863,7 @@ camera/frame_060375.png
 camera/frame_060420.png
 camera/frame_060673.png
 camera/frame_060847.png
+camera/frame_060859.png
 camera/frame_060875.png
 camera/frame_061012.png
 camera/frame_061041.png
@@ -975,9 +987,11 @@ camera/frame_073528.png
 camera/frame_073585.png
 camera/frame_073665.png
 camera/frame_073809.png
+camera/frame_073880.png
 camera/frame_073896.png
 camera/frame_074213.png
 camera/frame_074275.png
+camera/frame_074288.png
 camera/frame_074320.png
 camera/frame_074332.png
 camera/frame_074446.png
@@ -1176,6 +1190,7 @@ camera/frame_091954.png
 camera/frame_092161.png
 camera/frame_092162.png
 camera/frame_092186.png
+camera/frame_092295.png
 camera/frame_092455.png
 camera/frame_092499.png
 camera/frame_092515.png
@@ -1200,6 +1215,7 @@ camera/frame_094649.png
 camera/frame_094764.png
 camera/frame_094806.png
 camera/frame_094920.png
+camera/frame_095004.png
 camera/frame_095023.png
 camera/frame_095078.png
 camera/frame_095093.png

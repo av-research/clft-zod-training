@@ -1,14 +1,14 @@
 {
-    "Summary": "Waymo Fusion Large",
-    "tags": ["Waymo", "HPC", "CLFT-Large", "Fusion"],
+    "Summary": "Waymo Lidar Large",
+    "tags": ["Waymo", "HPC", "CLFT-Large", "Lidar"],
     "CLI": {
         "backbone": "clft",
-        "mode": "cross_fusion",
+        "mode": "lidar",
         "path": "./waymo_dataset/splits_clft/"
     },
     "General": {
         "device": "cuda:0",
-        "epochs": 100,
+        "epochs": 50,
         "batch_size": 24,
         "path_predicted_images": "output",
         "seed": 0,
@@ -19,7 +19,7 @@
         "model_path": ""
     },
     "Log": {
-        "logdir": "/gpfs/mariana/smbhome/totahv/waymo_logs/config_9/"
+        "logdir": "/gpfs/mariana/smbhome/totahv/waymo_logs/config_6/"
     },
     "CLFT": {
         "emb_dim": 1024,

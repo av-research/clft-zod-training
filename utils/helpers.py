@@ -21,6 +21,7 @@ def get_annotation_path(cam_path, dataset_name, config):
         anno_folder = config['Dataset']['annotation_path']
         return cam_path.replace('/camera', f'/{anno_folder}')
     else:  # waymo
+        # Use same annotation path as training: /annotation/ directories
         return cam_path.replace('/camera/', '/annotation/')
 
 def relabel_annotation(annotation, config):

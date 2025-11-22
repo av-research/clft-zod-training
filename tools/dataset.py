@@ -73,6 +73,7 @@ class Dataset(object):
     def __init__(self, config, split=None, path=None):
         np.random.seed(789)
         self.config = config
+        self.split = split
 
         list_examples_file = open(path, 'r')
         self.list_examples_cam = np.array(list_examples_file.read().splitlines())
@@ -155,19 +156,23 @@ class Dataset(object):
         assert (rgb_name == anno_name), "rgb and anno input not matching"
         assert (rgb_name == lidar_name), "rgb and lidar input not matching"
 
-        # Crop the top part 1/2 of the input data
+        # Crop the top part 1/2 of the input data (only for training)
         rgb_orig = rgb.copy()
         w_orig, h_orig = rgb.size  # PIL tuple. (w, h)
-        #if self.config['Dataset']['name'] == 'zod':
-        #    # For ZOD, don't crop to keep all annotations
-        #    delta = 0
-        #else:
-        delta = int(h_orig/2)
-        top_crop_rgb = TF.crop(rgb, delta, 0, h_orig-delta, w_orig)  # w,h
-        top_crop_anno = TF.crop(anno, delta, 0, h_orig-delta, w_orig)
-
-        top_crop_points_set, top_crop_camera_coord, _ = crop_pointcloud(
-            points_set, camera_coord, delta, 0, h_orig-delta, w_orig)
+        if self.split == 'train':
+            # For training, crop to focus on relevant regions
+            delta = int(h_orig/2)
+            top_crop_rgb = TF.crop(rgb, delta, 0, h_orig-delta, w_orig)  # w,h
+            top_crop_anno = TF.crop(anno, delta, 0, h_orig-delta, w_orig)
+            top_crop_points_set, top_crop_camera_coord, _ = crop_pointcloud(
+                points_set, camera_coord, delta, 0, h_orig-delta, w_orig)
+        else:
+            # For validation/test, use full images for fair evaluation
+            delta = 0
+            top_crop_rgb = rgb
+            top_crop_anno = anno
+            top_crop_points_set = points_set
+            top_crop_camera_coord = camera_coord
 
         data_augment = DataAugment(self.config, self.p_flip, self.p_crop,
                                    self.p_rot, top_crop_rgb, top_crop_anno,

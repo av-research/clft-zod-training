@@ -1,42 +1,30 @@
 {
-    "Summary": "Waymo Lidar Large",
-    "tags": ["Waymo", "HPC", "CLFT-Large", "Lidar"],
+    "Summary": "Waymo DeepLabV3+ RGB - Vehicle+Sign Specialization",
+    "tags": ["Waymo", "Local", "DeepLabV3+", "RGB", "Vehicle+Sign", "Specialization"],
     "CLI": {
-        "backbone": "clft",
-        "mode": "lidar",
+        "backbone": "deeplabv3plus",
+        "mode": "rgb",
         "path": "./waymo_dataset/splits_clft/"
     },
     "General": {
         "device": "cuda:0",
-        "epochs": 100,
-        "batch_size": 24,
+        "epochs": 50,
+        "batch_size": 12,
         "path_predicted_images": "output",
         "seed": 0,
         "resume_training": false,
         "reset_lr": false,
         "early_stop_patience": 200,
-        "save_epoch": 20,
+        "save_epoch": 10,
         "model_path": ""
     },
     "Log": {
-        "logdir": "/gpfs/mariana/smbhome/totahv/waymo_logs/config_6/"
+        "logdir": "./logs/waymo/deeplabv3plus_rgb_vehicle_sign/"
     },
-    "CLFT": {
-        "emb_dim": 1024,
-        "hooks": [5, 11, 17, 23],
-        "model_timm": "vit_large_patch16_384",
-        "clft_lr": 8e-05,
-        "patch_size": 16,
-        "reassembles": [4, 8, 16, 32],
-        "read": "projection",
-        "resample_dim": 256,
-        "type": "segmentation",
-        "loss_depth": "ssi",
-        "loss_segmentation": "ce",
-        "lr_momentum": 0.99
-    },
-    "CLFCN": {
-        "clfcn_lr": 6e-05
+    "DeepLabV3Plus": {
+        "learning_rate": 1e-4,
+        "backbone": "resnet101",
+        "pretrained": true
     },
     "Dataset": {
         "name": "waymo",
@@ -70,10 +58,9 @@
             {"name": "background","index": 5}
         ],
         "train_classes": [
-            {"name": "background","index": 0,"weight": 0.5,"dataset_mapping": [0,5],"color": [0,0,0]},
-            {"name": "vehicle","index": 1,"weight": 4.0,"dataset_mapping": [1],"color": [128,0,128]},
-            {"name": "sign","index": 2,"weight": 10.0,"dataset_mapping": [3],"color": [255,0,0]},
-            {"name": "human","index": 3,"weight": 4.0,"dataset_mapping": [2,4],"color": [0,255,255]}
+            {"name": "background","index": 0,"weight": 0.5,"dataset_mapping": [0,2,4,5],"color": [0,0,0]},
+            {"name": "vehicle","index": 1,"weight": 10.0,"dataset_mapping": [1],"color": [128,0,128]},
+            {"name": "sign","index": 2,"weight": 10.0,"dataset_mapping": [3],"color": [255,0,0]}
         ]
     }
 }

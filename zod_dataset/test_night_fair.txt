@@ -89,6 +89,7 @@ camera/frame_035184.png
 camera/frame_035534.png
 camera/frame_035731.png
 camera/frame_036093.png
+camera/frame_036732.png
 camera/frame_037257.png
 camera/frame_038538.png
 camera/frame_039242.png
@@ -109,6 +110,7 @@ camera/frame_043972.png
 camera/frame_044047.png
 camera/frame_044291.png
 camera/frame_044637.png
+camera/frame_044671.png
 camera/frame_044724.png
 camera/frame_044816.png
 camera/frame_046106.png
@@ -125,6 +127,7 @@ camera/frame_049624.png
 camera/frame_051845.png
 camera/frame_052234.png
 camera/frame_052480.png
+camera/frame_052522.png
 camera/frame_053165.png
 camera/frame_053719.png
 camera/frame_054117.png

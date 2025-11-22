@@ -144,6 +144,11 @@ def main():
     with open(args.config, 'r') as f:
         config = json.load(f)
     
+    # Fix default path for waymo
+    dataset_name = config['Dataset']['name']
+    if args.path == 'zod_dataset/visualizations.txt' and dataset_name == 'waymo':
+        args.path = 'waymo_dataset/visual_run_demo.txt'
+    
     # Setup device
     device = torch.device(config['General']['device']
                          if torch.cuda.is_available() else "cpu")

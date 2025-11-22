@@ -57,7 +57,7 @@ class DataLoader:
         anno = relabel_annotation(anno, self.config)
         
         # Convert to tensor and resize
-        anno_tensor = torch.from_numpy(anno).float()
+        anno_tensor = anno.float()
         anno_tensor = transforms.Resize(
             (self.resize, self.resize), 
             interpolation=transforms.InterpolationMode.NEAREST

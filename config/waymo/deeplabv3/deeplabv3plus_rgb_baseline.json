@@ -1,42 +1,30 @@
 {
-    "Summary": "Waymo RGB Base",
-    "tags": ["Waymo", "HPC", "CLFT-Base", "RGB"],
+    "Summary": "Waymo DeepLabV3+ RGB Baseline",
+    "tags": ["Waymo", "Local", "DeepLabV3+", "RGB", "Baseline"],
     "CLI": {
-        "backbone": "clft",
+        "backbone": "deeplabv3plus",
         "mode": "rgb",
         "path": "./waymo_dataset/splits_clft/"
     },
     "General": {
         "device": "cuda:0",
-        "epochs": 100,
-        "batch_size": 24,
+        "epochs": 50,
+        "batch_size": 12,
         "path_predicted_images": "output",
         "seed": 0,
-        "resume_training": true,
+        "resume_training": false,
         "reset_lr": false,
         "early_stop_patience": 200,
-        "save_epoch": 20,
+        "save_epoch": 10,
         "model_path": ""
     },
     "Log": {
-        "logdir": "/gpfs/mariana/smbhome/totahv/waymo_logs/config_1/"
+        "logdir": "./logs/waymo/deeplabv3plus_rgb_baseline/"
     },
-    "CLFT": {
-        "emb_dim": 768,
-        "hooks": [2, 5, 8, 11],
-        "model_timm": "vit_base_patch16_384",
-        "clft_lr": 8e-05,
-        "patch_size": 16,
-        "reassembles": [4, 8, 16, 32],
-        "read": "projection",
-        "resample_dim": 256,
-        "type": "segmentation",
-        "loss_depth": "ssi",
-        "loss_segmentation": "ce",
-        "lr_momentum": 0.99
-    },
-    "CLFCN": {
-        "clfcn_lr": 6e-05
+    "DeepLabV3Plus": {
+        "learning_rate": 1e-4,
+        "backbone": "resnet101",
+        "pretrained": true
     },
     "Dataset": {
         "name": "waymo",

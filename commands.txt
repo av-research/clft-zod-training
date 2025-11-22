@@ -3,10 +3,34 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 ssh totahv@base.hpc.taltech.ee
-cd /gpfs/mariana/smbhome/totahv/
+cd /gpfs/mariana/smbhome/totahv/clft-zod-training
 cd /gpfs/mariana/home/totahv/
 
 watch -n1 squeue -u totahv
+
+sbatch -J t-base train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_baseline.json
+sbatch -J t-hs train_deeplabv3plus.slurm config/deeplabv3/deeplabv3/deeplabv3plus_rgb_human_sign.json
+sbatch -J t-h train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_human_specialization.json
+sbatch -J t-hv train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_human_vehicle.json
+sbatch -J t-vs train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_vehicle_sign.json
+sbatch -J t-v train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_vehicle_specialization.json
+sbatch -J t-s train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_vehicle_sign.json
+
+sbatch -J t-hs train.slurm config/waymo_hpc/clft/human_sign.json
+sbatch -J t-hv train.slurm config/waymo_hpc/clft/human_vehicle.json
+sbatch -J t-vs train.slurm config/waymo_hpc/clft/vehicle_sign.json
+sbatch -J t-v train.slurm config/waymo_hpc/clft/vehicle_specialization.json
+sbatch -J t-h train.slurm config/waymo_hpc/clft/human_specialization.json
+sbatch -J t-s train.slurm config/waymo_hpc/clft/sign_specialization.json
+sbatch -J t-2 train.slurm config/waymo_hpc/clft/config_2.json
+
+sbatch -J t-hs test.slurm config/waymo_hpc/clft/human_sign.json
+sbatch -J t-hv test.slurm config/waymo_hpc/clft/human_vehicle.json
+sbatch -J t-vs test.slurm config/waymo_hpc/clft/vehicle_sign.json
+sbatch -J t-v test.slurm config/waymo_hpc/clft/vehicle_specialization.json
+sbatch -J t-h test.slurm config/waymo_hpc/clft/human_specialization.json
+sbatch -J t-s test.slurm config/waymo_hpc/clft/sign_specialization.json
+sbatch -J t-2 test.slurm config/waymo_hpc/clft/config_2.json
 
 # ZOD RGB
 sbatch -J train-1z train.slurm ./config/zod_hpc/config_1.json
@@ -44,10 +68,10 @@ sbatch -J train-6w train.slurm ./config/waymo_hpc/config_6.json
 sbatch -J train-9w train.slurm ./config/waymo_hpc/config_9.json
 
 # Copy json files from server to local
-rsync -avz --include='*/' --include='*.json' --exclude='*' totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/zod_logs/ /media/tom/ml/zod_logs
+rsync -avz --include='*/' --include='*.json' --exclude='*' totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/waymo_logs/config_2/ /media/tom/ml/hpc_results
 
 # Copy zod_dataset to server
 rsync -avz /media/tom/ml/projects/clft-zod-training/zod_dataset totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/clft-zod-training/
 
 # Download specific epoch file from server to local
-rsync -avz totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/zod_logs/config_1/checkpoints/epoch.pth /media/tom/ml/projects/clft-zod-training/logs/zod/config_1/checkpoints/
+rsync -avz totahv@base.hpc.taltech.ee:/gpfs/mariana/smbhome/totahv/waymo_logs/config_2/checkpoints/epoch_16_eb8e3d61-a55d-48a8-8e5e-1404bb706645.pth /media/tom/ml/projects/clft-zod-training/logs/waymo/config_2/checkpoints/

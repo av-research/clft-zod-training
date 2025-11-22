@@ -8,7 +8,7 @@
     },
     "General": {
         "device": "cuda:0",
-        "epochs": 100,
+        "epochs": 50,
         "batch_size": 24,
         "path_predicted_images": "output",
         "seed": 0,

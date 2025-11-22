@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from models.deeplabv3plus import build_deeplabv3plus
 from core.metrics_calculator import MetricsCalculator
@@ -136,7 +137,8 @@ def train_epoch(model, dataloader, criterion, optimizer, metrics_calc, device, c
     
     accumulators = metrics_calc.create_accumulators(device)
     
-    for batch in dataloader:
+    progress_bar = tqdm(dataloader, desc='Training')
+    for batch in progress_bar:
         rgb = batch['rgb'].to(device)
         anno = batch['anno'].to(device)
         
@@ -165,6 +167,9 @@ def train_epoch(model, dataloader, criterion, optimizer, metrics_calc, device, c
         
         # Update metrics (pass raw predictions, not argmax)
         metrics_calc.update_accumulators(accumulators, pred, anno, num_classes)
+        
+        # Update progress bar
+        progress_bar.set_postfix({'loss': f'{loss.item():.4f}'})
     
     # Compute epoch metrics
     metrics = metrics_calc.compute_epoch_metrics(accumulators, total_loss, num_batches)
@@ -181,7 +186,8 @@ def validate_epoch(model, dataloader, criterion, metrics_calc, device, config,
     accumulators = metrics_calc.create_accumulators(device)
     
     with torch.no_grad():
-        for batch in dataloader:
+        progress_bar = tqdm(dataloader, desc='Validating')
+        for batch in progress_bar:
             rgb = batch['rgb'].to(device)
             anno = batch['anno'].to(device)
             
@@ -204,6 +210,9 @@ def validate_epoch(model, dataloader, criterion, metrics_calc, device, config,
             
             # Update metrics (pass raw predictions, not argmax)
             metrics_calc.update_accumulators(accumulators, pred, anno, num_classes)
+            
+            # Update progress bar
+            progress_bar.set_postfix({'loss': f'{loss.item():.4f}'})
     
     # Compute epoch metrics
     metrics = metrics_calc.compute_epoch_metrics(accumulators, total_loss, num_batches)
@@ -382,17 +391,17 @@ def main():
         epoch_start_time = time.time()
         
         # Train
+        print(f"Training epoch {epoch + 1}/{config['General']['epochs']}...")
         train_metrics = train_epoch(model, train_dataloader, criterion, optimizer, 
                                     metrics_calc, device, config, num_classes, modality, is_fusion)
-        print(f"Train Loss: {train_metrics['epoch_loss']:.4f}")
-        print(f"Train mIoU: {train_metrics['mean_iou']:.4f}")
+        metrics_calc.print_metrics(train_metrics, prefix="Training ")
         
         # Validate
+        print(f"Validating epoch {epoch + 1}/{config['General']['epochs']}...")
         val_metrics = validate_epoch(model, valid_dataloader, criterion, 
                                      metrics_calc, device, config, num_classes, modality, is_fusion)
         
-        print(f"Val Loss: {val_metrics['epoch_loss']:.4f}")
-        print(f"Val mIoU: {val_metrics['mean_iou']:.4f}")
+        metrics_calc.print_metrics(val_metrics, prefix="Validation ")
         
         epoch_time = time.time() - epoch_start_time
         print(f"Epoch time: {epoch_time:.2f}s")
