@@ -321,7 +321,7 @@ def main():
         num_classes=num_classes,
         mode=modality,
         fusion_type=fusion_type,
-        pretrained=True
+        pretrained=config['DeepLabV3Plus'].get('pretrained', True)
     )
     model.to(device)
     

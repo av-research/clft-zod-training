@@ -22,6 +22,7 @@
         "logdir": "/gpfs/mariana/smbhome/totahv/waymo_logs/config_2/"
     },
     "CLFT": {
+        "pretrained": false,
         "emb_dim": 768,
         "hooks": [2, 5, 8, 11],
         "model_timm": "vit_base_resnet50_384",
