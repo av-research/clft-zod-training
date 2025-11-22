@@ -315,6 +315,7 @@ camera/frame_096876.png
 camera/frame_097147.png
 camera/frame_097572.png
 camera/frame_097687.png
+camera/frame_097928.png
 camera/frame_098049.png
 camera/frame_098979.png
 camera/frame_099363.png

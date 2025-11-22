@@ -218,7 +218,8 @@ def main():
         'test_day_fair.txt',
         'test_night_fair.txt',
         'test_day_rain.txt',
-        'test_night_rain.txt'
+        'test_night_rain.txt',
+        'test_snow.txt'
     ]
     
     # Run test suite

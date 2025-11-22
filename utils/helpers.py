@@ -19,10 +19,10 @@ def get_annotation_path(cam_path, dataset_name, config):
     """Get annotation path based on dataset and config."""
     if dataset_name == 'zod':
         anno_folder = config['Dataset']['annotation_path']
-        return cam_path.replace('/camera', f'/{anno_folder}')
+        return cam_path.replace('camera', anno_folder)
     else:  # waymo
         # Use same annotation path as training: /annotation/ directories
-        return cam_path.replace('/camera/', '/annotation/')
+        return cam_path.replace('camera/', 'annotation/')
 
 def relabel_annotation(annotation, config):
     """

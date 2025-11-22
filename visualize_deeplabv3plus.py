@@ -3,6 +3,7 @@
 """
 Visualization script for DeepLabV3+ models.
 Works with both ZOD and Waymo datasets.
+Supports RGB, LiDAR, and fusion modalities.
 """
 import os
 import sys
@@ -41,9 +42,9 @@ def load_image_paths(path_arg, dataroot):
 def get_lidar_path(cam_path, dataset_name):
     """Get LiDAR path based on dataset."""
     if dataset_name == 'zod':
-        return cam_path.replace('/camera', '/lidar_png')
+        return cam_path.replace('camera', 'lidar_png')
     else:  # waymo
-        return cam_path.replace('/camera/', '/lidar/').replace('.png', '.pkl')
+        return cam_path.replace('camera/', 'lidar/').replace('.png', '.pkl')
 
 
 def prepare_model_inputs(rgb, lidar, modality):
@@ -73,6 +74,16 @@ def process_images(model, data_loader, visualizer, image_paths, dataroot,
 
         anno_path = get_annotation_path(cam_path, dataset_name, config)
         lidar_path = get_lidar_path(cam_path, dataset_name)
+
+        # Check if camera image exists
+        if not os.path.exists(cam_path):
+            print(f'Warning: Camera image not found: {cam_path}')
+            continue
+
+        # Check if LiDAR is needed and exists
+        if modality == 'fusion' and not os.path.exists(lidar_path):
+            print(f'Warning: LiDAR file not found: {lidar_path}')
+            continue
 
         # Verify paths match
         rgb_name = os.path.basename(cam_path).split('.')[0]
@@ -131,7 +142,7 @@ def main():
     parser = argparse.ArgumentParser(description='Visualize DeepLabV3+ Model Predictions')
     parser.add_argument('-p', '--path', type=str, required=False,
                        default='zod_dataset/visualizations.txt',
-                       help='Path to image file or text file with image paths')
+                       help='Path to image file or text file with image paths (default: zod_dataset/visualizations.txt)')
     parser.add_argument('-c', '--config', type=str, required=True,
                        help='Path to config file')
     parser.add_argument('--upload', action='store_true',
