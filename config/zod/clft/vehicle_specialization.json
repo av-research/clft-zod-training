@@ -1,11 +1,7 @@
 {
     "Summary": "ZOD RGB Hybrid - Vehicle Specialization",
     "tags": ["ZOD", "Local", "CLFT-Hybrid", "RGB", "Vehicle-Only", "Specialization"],
-    "CLI": {
-        "backbone": "clft",
-        "mode": "rgb",
-        "path": "./zod_dataset/"
-    },
+    "CLI": {"backbone": "clft", "mode": "rgb", "path": "./zod_dataset/"},
     "General": {
         "device": "cuda:0",
         "epochs": 50,
@@ -18,9 +14,7 @@
         "save_epoch": 20,
         "model_path": ""
     },
-    "Log": {
-        "logdir": "./logs/zod/vehicle_specialization/"
-    },
+    "Log": {"logdir": "./logs/zod/vehicle_specialization/"},
     "CLFT": {
         "emb_dim": 768,
         "hooks": [2, 5, 8, 11],
@@ -33,7 +27,8 @@
         "type": "segmentation",
         "loss_depth": "ssi",
         "loss_segmentation": "ce",
-        "lr_momentum": 0.99
+        "lr_momentum": 0.99,
+        "pretrained": true
     },
     "Dataset": {
         "name": "zod",
@@ -41,11 +36,7 @@
         "annotation_path": "annotation_camera_only",
         "train_split": "./zod_dataset/train.txt",
         "val_split": "./zod_dataset/validation.txt",
-        "splits": {
-            "split_train": 0.6,
-            "split_val": 0.2,
-            "split_test": 0.2
-        },
+        "splits": {"split_train": 0.6, "split_val": 0.2, "split_test": 0.2},
         "transforms": {
             "resize": 384,
             "random_rotate_range": 20,
@@ -62,16 +53,16 @@
             "lidar_std_iseauto": [7.79, 2.156, 7.6]
         },
         "dataset_classes": [
-            {"name": "background","index": 0},
-            {"name": "ignore","index": 1},
-            {"name": "vehicle","index": 2},
-            {"name": "sign","index": 3},
-            {"name": "cyclist","index": 4},
-            {"name": "pedestrian","index": 5}
+            {"name": "background", "index": 0},
+            {"name": "ignore", "index": 1},
+            {"name": "vehicle", "index": 2},
+            {"name": "sign", "index": 3},
+            {"name": "cyclist", "index": 4},
+            {"name": "pedestrian", "index": 5}
         ],
         "train_classes": [
-            {"name": "background","index": 0,"weight": 0.5,"dataset_mapping": [0,1,3,4,5],"color": [0,0,0]},
-            {"name": "vehicle","index": 1,"weight": 10.0,"dataset_mapping": [2],"color": [128,0,128]}
+            {"name": "background", "index": 0, "weight": 0.5, "dataset_mapping": [0, 1, 3, 4, 5], "color": [0, 0, 0]},
+            {"name": "vehicle", "index": 1, "weight": 10.0, "dataset_mapping": [2], "color": [128, 0, 128]}
         ]
     }
 }

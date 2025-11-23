@@ -24,7 +24,8 @@ class CLFT(nn.Module):
                  reassemble_s=None,
                  nclasses=None,
                  type=None,
-                 model_timm=None
+                 model_timm=None,
+                 pretrained=True
                  # num_layers_encoder=24,
                  # transformer_dropout=0,
                  ):
@@ -39,7 +40,7 @@ class CLFT(nn.Module):
         """
         super().__init__()
 
-        self.transformer_encoders = timm.create_model(model_timm, pretrained=True)
+        self.transformer_encoders = timm.create_model(model_timm, pretrained=pretrained)
         self.type_ = type
 
         # Register hooks

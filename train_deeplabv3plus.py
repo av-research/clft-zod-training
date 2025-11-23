@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from torch.utils.data import DataLoader
+from torch.optim import lr_scheduler
 from tqdm import tqdm
 
 from models.deeplabv3plus import build_deeplabv3plus
@@ -22,7 +23,7 @@ from utils.metrics import find_overlap_exclude_bg_ignore
 from integrations.training_logger import generate_training_uuid, log_epoch_results
 from integrations.vision_service import create_training, create_config, get_training_by_uuid, send_epoch_results_from_file
 from utils.helpers import get_model_path
-from utils.system_monitor import get_epoch_system_snapshot, print_system_info, get_system_info
+from utils.system_monitor import get_epoch_system_snapshot, print_system_info
 
 
 def calculate_num_classes(config):
@@ -56,6 +57,48 @@ def setup_criterion(config):
     print(f"For classes: {[cls['name'] for cls in sorted_classes]}")
     
     return nn.CrossEntropyLoss(weight=weight_loss)
+
+
+def setup_lr_scheduler(optimizer, config):
+    """Setup learning rate scheduler based on configuration."""
+    lr_config = config['DeepLabV3Plus'].get('lr_scheduler', None)
+    if not lr_config:
+        print("No learning rate scheduler configured, using constant learning rate")
+        return None
+    
+    scheduler_type = lr_config.get('type', 'step')
+    
+    if scheduler_type == 'step':
+        step_size = lr_config.get('step_size', 30)
+        gamma = lr_config.get('gamma', 0.1)
+        scheduler = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+        print(f"Using StepLR scheduler: step_size={step_size}, gamma={gamma}")
+        
+    elif scheduler_type == 'cosine':
+        T_max = lr_config.get('T_max', config['General']['epochs'])
+        eta_min = lr_config.get('eta_min', 1e-6)
+        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
+        print(f"Using CosineAnnealingLR scheduler: T_max={T_max}, eta_min={eta_min}")
+        
+    elif scheduler_type == 'exponential':
+        gamma = lr_config.get('gamma', 0.95)
+        scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
+        print(f"Using ExponentialLR scheduler: gamma={gamma}")
+        
+    elif scheduler_type == 'plateau':
+        mode = lr_config.get('mode', 'max')
+        factor = lr_config.get('factor', 0.1)
+        patience = lr_config.get('patience', 10)
+        min_lr = lr_config.get('min_lr', 1e-6)
+        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode=mode, factor=factor, 
+                                                   patience=patience, min_lr=min_lr)
+        print(f"Using ReduceLROnPlateau scheduler: mode={mode}, factor={factor}, patience={patience}")
+        
+    else:
+        print(f"Unknown scheduler type: {scheduler_type}, using constant learning rate")
+        return None
+    
+    return scheduler
 
 
 def setup_vision_service(config, training_uuid):
@@ -219,24 +262,30 @@ def validate_epoch(model, dataloader, criterion, metrics_calc, device, config,
     return metrics
 
 
-def save_checkpoint(model, optimizer, epoch, config, log_dir, epoch_uuid):
+def save_checkpoint(model, optimizer, scheduler, epoch, config, log_dir, epoch_uuid):
     """Save model checkpoint."""
     checkpoint_dir = os.path.join(log_dir, 'checkpoints')
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     checkpoint_path = os.path.join(checkpoint_dir, f'epoch_{epoch}_{epoch_uuid}.pth')
     
-    torch.save({
+    checkpoint_data = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'config': config
-    }, checkpoint_path)
+    }
+    
+    # Add scheduler state if it exists
+    if scheduler is not None:
+        checkpoint_data['scheduler_state_dict'] = scheduler.state_dict()
+    
+    torch.save(checkpoint_data, checkpoint_path)
     
     print(f"Saved checkpoint: {checkpoint_path}")
 
 
-def load_checkpoint_if_resume(config, model, optimizer, device):
+def load_checkpoint_if_resume(config, model, optimizer, scheduler, device):
     """Load checkpoint if resuming training."""
     if not config['General']['resume_training']:
         print('Training from the beginning')
@@ -268,6 +317,11 @@ def load_checkpoint_if_resume(config, model, optimizer, device):
     
     print('Loading trained optimizer...')
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    
+    # Load scheduler state if it exists
+    if scheduler is not None and 'scheduler_state_dict' in checkpoint:
+        print('Loading scheduler state...')
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     
     return finished_epochs
 
@@ -321,13 +375,16 @@ def main():
         num_classes=num_classes,
         mode=modality,
         fusion_type=fusion_type,
-        pretrained=True
+        pretrained=config['DeepLabV3Plus'].get('pretrained', True)
     )
     model.to(device)
     
     # Setup optimizer
     lr = config['DeepLabV3Plus'].get('learning_rate', 1e-4)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    
+    # Setup learning rate scheduler
+    scheduler = setup_lr_scheduler(optimizer, config)
     
     # Setup criterion
     criterion = setup_criterion(config)
@@ -348,7 +405,7 @@ def main():
             vision_training_id = setup_vision_service(config, training_uuid)
     
     # Load checkpoint if resuming
-    start_epoch = load_checkpoint_if_resume(config, model, optimizer, device)
+    start_epoch = load_checkpoint_if_resume(config, model, optimizer, scheduler, device)
     
     # Setup datasets
     Dataset = setup_dataset(config)
@@ -409,7 +466,19 @@ def main():
         # Get system resource snapshot
         system_snapshot = get_epoch_system_snapshot()
         
-        # Log epoch with CLFT-style format
+        # Step learning rate scheduler first
+        if scheduler is not None:
+            if isinstance(scheduler, lr_scheduler.ReduceLROnPlateau):
+                # For ReduceLROnPlateau, step with validation metric
+                scheduler.step(val_metrics['mean_iou'])
+            else:
+                # For other schedulers, step normally
+                scheduler.step()
+            
+            current_lr = optimizer.param_groups[0]['lr']
+            print(f"Learning rate updated to: {current_lr:.6f}")
+        
+        # Log epoch with CLFT-style format (after scheduler step so LR is updated)
         results_dict = metrics_calc.prepare_results_dict(train_metrics, val_metrics)
         
         epoch_file = log_epoch_results(
@@ -431,7 +500,7 @@ def main():
         
         # Save checkpoint
         if (epoch + 1) % config['General']['save_epoch'] == 0 or epoch == config['General']['epochs'] - 1:
-            save_checkpoint(model, optimizer, epoch, config, log_dir, epoch_uuid)
+            save_checkpoint(model, optimizer, scheduler, epoch, config, log_dir, epoch_uuid)
         
         # Early stopping
         if val_metrics['mean_iou'] > best_val_iou:
@@ -441,13 +510,16 @@ def main():
             checkpoint_dir = os.path.join(log_dir, 'checkpoints')
             os.makedirs(checkpoint_dir, exist_ok=True)
             best_path = os.path.join(checkpoint_dir, f'best_model_{epoch_uuid}.pth')
-            torch.save({
+            best_checkpoint = {
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'config': config,
                 'mean_iou': best_val_iou
-            }, best_path)
+            }
+            if scheduler is not None:
+                best_checkpoint['scheduler_state_dict'] = scheduler.state_dict()
+            torch.save(best_checkpoint, best_path)
             print(f"Saved new best model with mIoU: {best_val_iou:.4f}")
         else:
             patience_counter += 1

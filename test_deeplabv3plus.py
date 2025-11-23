@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from models.deeplabv3plus import build_deeplabv3plus
 from core.metrics_calculator import MetricsCalculator
-from utils.metrics import find_overlap_exclude_bg_ignore
+from utils.metrics import find_overlap_exclude_bg_ignore, auc_ap
 from utils.helpers import get_model_path
 from integrations.vision_service import send_test_results_from_file
 
@@ -67,8 +67,13 @@ def test_model(model, dataloader, metrics_calc, device, config, num_classes, mod
     total_inference_time = 0.0
     total_samples = 0
     
+    # Initialize per-class metrics for AP calculation
+    num_eval_classes = len(metrics_calc.eval_classes)
+    class_pre = torch.zeros((len(dataloader), num_eval_classes), dtype=torch.float)
+    class_rec = torch.zeros((len(dataloader), num_eval_classes), dtype=torch.float)
+    
     with torch.no_grad():
-        for batch in tqdm(dataloader, desc="Testing"):
+        for i, batch in enumerate(tqdm(dataloader, desc="Testing")):
             rgb = batch['rgb'].to(device)
             anno = batch['anno'].to(device)
             
@@ -99,12 +104,32 @@ def test_model(model, dataloader, metrics_calc, device, config, num_classes, mod
             total_inference_time += inference_time
             total_samples += rgb.size(0)
             
-            # Update metrics (pass raw predictions, not argmax)
-            metrics_calc.update_accumulators(accumulators, pred, anno, num_classes)
+            # Update accumulators
+            batch_overlap, batch_pred, batch_label, batch_union = metrics_calc.update_accumulators(
+                accumulators, pred, anno, num_classes
+            )
+            
+            # Calculate batch metrics for AP
+            batch_IoU = 1.0 * batch_overlap / (np.spacing(1) + batch_union)
+            batch_precision = 1.0 * batch_overlap / (np.spacing(1) + batch_pred)
+            batch_recall = 1.0 * batch_overlap / (np.spacing(1) + batch_label)
+            
+            # Store metrics for eval classes
+            array_indices = [idx - 1 for idx in metrics_calc.eval_indices]  # Assuming ZOD dataset
+            for j, array_idx in enumerate(array_indices):
+                class_pre[i, j] = batch_precision[array_idx]
+                class_rec[i, j] = batch_recall[array_idx]
+            
             num_batches += 1
     
     # Compute metrics
     metrics = metrics_calc.compute_epoch_metrics(accumulators, total_loss, num_batches)
+    
+    # Add AP calculation
+    metrics['ap'] = torch.zeros(num_eval_classes)
+    for i in range(num_eval_classes):
+        ap = auc_ap(class_pre[:, i], class_rec[:, i])
+        metrics['ap'][i] = ap
     
     # Add inference time statistics
     metrics['inference_time'] = {
@@ -128,6 +153,7 @@ def print_metrics(metrics, dataset_name, class_names):
     print(f"Mean Precision: {torch.mean(metrics['precision']).item():.4f}")
     print(f"Mean Recall: {torch.mean(metrics['recall']).item():.4f}")
     print(f"Mean F1: {torch.mean(metrics['f1']).item():.4f}")
+    print(f"Mean AP: {torch.mean(metrics['ap']).item():.4f}")
     
     if 'inference_time' in metrics:
         inf_time = metrics['inference_time']
@@ -142,7 +168,8 @@ def print_metrics(metrics, dataset_name, class_names):
         prec = metrics['precision'][i].item()
         rec = metrics['recall'][i].item()
         f1 = metrics['f1'][i].item()
-        print(f"  {class_name}: IoU={iou:.4f}, Prec={prec:.4f}, Rec={rec:.4f}, F1={f1:.4f}")
+        ap = metrics['ap'][i].item()
+        print(f"  {class_name}: IoU={iou:.4f}, Prec={prec:.4f}, Rec={rec:.4f}, F1={f1:.4f}, AP={ap:.4f}")
 
 
 def extract_epoch_info(model_path):
@@ -173,7 +200,8 @@ def convert_metrics_to_serializable(metrics, config, num_eval_classes):
         'mean_iou': float(metrics['mean_iou']),
         'mean_precision': float(torch.mean(metrics['precision']).item()),
         'mean_recall': float(torch.mean(metrics['recall']).item()),
-        'mean_f1': float(torch.mean(metrics['f1']).item())
+        'mean_f1': float(torch.mean(metrics['f1']).item()),
+        'mean_ap': float(torch.mean(metrics['ap']).item())
     }
     
     # Add per-class metrics
@@ -183,7 +211,8 @@ def convert_metrics_to_serializable(metrics, config, num_eval_classes):
             'iou': float(metrics['epoch_IoU'][i].item()),
             'precision': float(metrics['precision'][i].item()),
             'recall': float(metrics['recall'][i].item()),
-            'f1': float(metrics['f1'][i].item())
+            'f1': float(metrics['f1'][i].item()),
+            'ap': float(metrics['ap'][i].item())
         }
     
     # Add inference time if present
@@ -306,7 +335,8 @@ def main():
         ('day_fair', 'test_day_fair.txt'),
         ('day_rain', 'test_day_rain.txt'),
         ('night_fair', 'test_night_fair.txt'),
-        ('night_rain', 'test_night_rain.txt')
+        ('night_rain', 'test_night_rain.txt'),
+        ('snow', 'test_snow.txt')
     ]
     
     # Test on each weather condition

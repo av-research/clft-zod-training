@@ -1,5 +1,5 @@
 #!/bin/bash 
-#SBATCH --job-name=clft-train                ### job name
+#SBATCH --job-name=z-c-spec                ### job name
 #SBATCH -n 1
 #SBATCH -p gpu                  ### use gpu
 #SBATCH --gres=gpu:A100:1               ### specifying the GPU type

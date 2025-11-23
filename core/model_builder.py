@@ -23,6 +23,8 @@ class ModelBuilder:
         """Build model based on configuration."""
 
         resize = self.config['Dataset']['transforms']['resize']
+        pretrained = self.config['CLFT'].get('pretrained', True)
+        
         model = CLFT(
             RGB_tensor_size=(3, resize, resize),
             XYZ_tensor_size=(3, resize, resize),
@@ -34,10 +36,11 @@ class ModelBuilder:
             reassemble_s=self.config['CLFT']['reassembles'],
             nclasses=self.num_unique_classes,
             type=self.config['CLFT']['type'],
-            model_timm=self.config['CLFT']['model_timm']
+            model_timm=self.config['CLFT']['model_timm'],
+            pretrained=pretrained
         )
         
-        print(f"Built {self.config['CLI']['backbone']} model with {self.num_unique_classes} classes")
+        print(f"Built {self.config['CLI']['backbone']} model with {self.num_unique_classes} classes (pretrained: {pretrained})")
         return model
     
     def load_checkpoint(self, model, checkpoint_path):

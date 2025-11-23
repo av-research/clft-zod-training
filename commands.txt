@@ -8,13 +8,22 @@ cd /gpfs/mariana/home/totahv/
 
 watch -n1 squeue -u totahv
 
-sbatch -J t-base train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_baseline.json
-sbatch -J t-hs train_deeplabv3plus.slurm config/deeplabv3/deeplabv3/deeplabv3plus_rgb_human_sign.json
-sbatch -J t-h train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_human_specialization.json
-sbatch -J t-hv train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_human_vehicle.json
-sbatch -J t-vs train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_vehicle_sign.json
-sbatch -J t-v train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_vehicle_specialization.json
-sbatch -J t-s train_deeplabv3plus.slurm config/waymo/deeplabv3/deeplabv3plus_rgb_vehicle_sign.json
+sbatch -J t-base train_deeplabv3plus.slurm config/waymo/deeplabv3/rgb_baseline.json
+sbatch -J t-s train_deeplabv3plus.slurm config/waymo/deeplabv3/rgb_sign_specialization.json
+sbatch -J t-h train_deeplabv3plus.slurm config/waymo/deeplabv3/rgb_human_specialization.json
+sbatch -J t-v train_deeplabv3plus.slurm config/waymo/deeplabv3/rgb_vehicle_specialization.json
+sbatch -J t-hs train_deeplabv3plus.slurm config/waymo/deeplabv3/rgb_human_sign.json
+sbatch -J t-hv train_deeplabv3plus.slurm config/waymo/deeplabv3/rgb_human_vehicle.json
+sbatch -J t-vs train_deeplabv3plus.slurm config/waymo/deeplabv3/rgb_vehicle_sign.json
+
+python visualize_deeplabv3plus.py --config config/waymo/deeplabv3/rgb_baseline.json --upload
+python visualize_deeplabv3plus.py --config config/waymo/deeplabv3/rgb_sign_specialization.json --upload
+python visualize_deeplabv3plus.py --config config/waymo/deeplabv3/rgb_human_specialization.json --upload
+python visualize_deeplabv3plus.py --config config/waymo/deeplabv3/rgb_vehicle_specialization.json --upload
+python visualize_deeplabv3plus.py --config config/waymo/deeplabv3/rgb_human_sign.json --upload
+python visualize_deeplabv3plus.py --config config/waymo/deeplabv3/rgb_human_vehicle.json --upload
+python visualize_deeplabv3plus.py --config config/waymo/deeplabv3/rgb_vehicle_sign.json --upload
+
 
 sbatch -J t-hs train.slurm config/waymo_hpc/clft/human_sign.json
 sbatch -J t-hv train.slurm config/waymo_hpc/clft/human_vehicle.json

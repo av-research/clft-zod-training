@@ -1,11 +1,7 @@
 {
     "Summary": "ZOD DeepLabV3+ Late Fusion (Weighted Average)",
     "tags": ["ZOD", "Local", "DeepLabV3+", "Fusion", "Baseline"],
-    "CLI": {
-        "backbone": "deeplabv3plus",
-        "mode": "fusion",
-        "path": "./zod_dataset/"
-    },
+    "CLI": {"backbone": "deeplabv3plus", "mode": "fusion", "path": "./zod_dataset/"},
     "General": {
         "device": "cuda:0",
         "epochs": 50,
@@ -18,14 +14,13 @@
         "save_epoch": 10,
         "model_path": ""
     },
-    "Log": {
-        "logdir": "./logs/zod/deeplabv3plus_fusion_weighted/"
-    },
+    "Log": {"logdir": "./logs/zod/deeplabv3plus_fusion_weighted/"},
     "DeepLabV3Plus": {
-        "learning_rate": 1e-4,
+        "learning_rate": 0.0001,
         "backbone": "resnet101",
         "pretrained": true,
-        "fusion_type": "weighted"
+        "fusion_type": "weighted",
+        "lr_scheduler": {"type": "step", "step_size": 15, "gamma": 0.5}
     },
     "Dataset": {
         "name": "zod",
@@ -33,11 +28,7 @@
         "annotation_path": "annotation_camera_only",
         "train_split": "./zod_dataset/train.txt",
         "val_split": "./zod_dataset/validation.txt",
-        "splits": {
-            "split_train": 0.6,
-            "split_val": 0.2,
-            "split_test": 0.2
-        },
+        "splits": {"split_train": 0.6, "split_val": 0.2, "split_test": 0.2},
         "transforms": {
             "resize": 384,
             "random_rotate_range": 20,
@@ -54,18 +45,18 @@
             "lidar_std_iseauto": [7.79, 2.156, 7.6]
         },
         "dataset_classes": [
-            {"name": "background","index": 0},
-            {"name": "ignore","index": 1},
-            {"name": "vehicle","index": 2},
-            {"name": "sign","index": 3},
-            {"name": "cyclist","index": 4},
-            {"name": "pedestrian","index": 5}
+            {"name": "background", "index": 0},
+            {"name": "ignore", "index": 1},
+            {"name": "vehicle", "index": 2},
+            {"name": "sign", "index": 3},
+            {"name": "cyclist", "index": 4},
+            {"name": "pedestrian", "index": 5}
         ],
         "train_classes": [
-            {"name": "background","index": 0,"weight": 0.1,"dataset_mapping": [0,1],"color": [0,0,0]},
-            {"name": "vehicle","index": 1,"weight": 10.0,"dataset_mapping": [2],"color": [128,0,128]},
-            {"name": "sign","index": 2,"weight": 15.0,"dataset_mapping": [3],"color": [255,0,0]},
-            {"name": "human","index": 3,"weight": 20.0,"dataset_mapping": [4,5],"color": [0,255,255]}
+            {"name": "background", "index": 0, "weight": 0.1, "dataset_mapping": [0, 1], "color": [0, 0, 0]},
+            {"name": "vehicle", "index": 1, "weight": 10.0, "dataset_mapping": [2], "color": [128, 0, 128]},
+            {"name": "sign", "index": 2, "weight": 15.0, "dataset_mapping": [3], "color": [255, 0, 0]},
+            {"name": "human", "index": 3, "weight": 20.0, "dataset_mapping": [4, 5], "color": [0, 255, 255]}
         ]
     }
 }
