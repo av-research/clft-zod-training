@@ -76,11 +76,23 @@ def _compute_ap_for_class(cls_name, all_predictions, all_targets):
         return 0.0
     
     # Concatenate all predictions and targets for this class
-    pred_probs = torch.cat(all_predictions[cls_name])  # All predicted probabilities
-    pred_targets = torch.cat(all_targets[cls_name])    # All ground truth labels
+    try:
+        pred_probs = torch.cat(all_predictions[cls_name])  # All predicted probabilities
+        pred_targets = torch.cat(all_targets[cls_name])    # All ground truth labels
+    except RuntimeError as e:
+        print(f"Warning: Failed to concatenate tensors for {cls_name}: {e}")
+        return 0.0
     
     if len(pred_probs) == 0:
         return 0.0
+    
+    # Limit to reasonable size to avoid memory issues (sample if too large)
+    max_samples = 100000  # Limit to 100k samples for AP calculation
+    if len(pred_probs) > max_samples:
+        # Sample a subset for AP calculation
+        indices = torch.randperm(len(pred_probs))[:max_samples]
+        pred_probs = pred_probs[indices]
+        pred_targets = pred_targets[indices]
     
     # Sort by prediction confidence (descending)
     sorted_indices = torch.argsort(pred_probs, descending=True)
