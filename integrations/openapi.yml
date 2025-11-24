@@ -30,6 +30,10 @@ tags:
     description: Model testing and evaluation results
   - name: Visualizations
     description: Training epoch visualization management
+  - name: Benchmarks
+    description: Model benchmark results and performance metrics
+  - name: Comparisons
+    description: Training/test/benchmark comparison management
 
 components:
   schemas:
@@ -1144,6 +1148,395 @@ components:
               items:
                 type: string
               example: ["confusion_matrix", "roc_curve", "loss_plot", "precision_recall"]
+      required:
+        - success
+        - data
+
+    # Benchmark schemas
+    Benchmark:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        training_uuid:
+          type: string
+          example: "training-uuid-123"
+        epoch_uuid:
+          type: string
+          example: "epoch-uuid-456"
+        epoch:
+          type: integer
+          example: 100
+        timestamp:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00.000Z"
+        system_info:
+          type: object
+          description: "System information and hardware details"
+          properties:
+            cpu_percent:
+              type: number
+              example: 3.0
+            cpu_count:
+              type: integer
+              example: 20
+            cpu_count_physical:
+              type: integer
+              example: 14
+            memory_percent:
+              type: number
+              example: 68.8
+            memory_used_gb:
+              type: number
+              example: 21.41
+            memory_max_gb:
+              type: number
+              example: 31.11
+            process:
+              type: object
+              properties:
+                cpu_percent:
+                  type: number
+                  example: 0.0
+                memory_gb:
+                  type: number
+                  example: 3.6
+                threads:
+                  type: integer
+                  example: 46
+            gpu:
+              type: object
+              properties:
+                gpu_0:
+                  type: object
+                  properties:
+                    memory_used_gb:
+                      type: number
+                      example: 1.86
+                    memory_max_gb:
+                      type: number
+                      example: 15.44
+                    memory_reserved_gb:
+                      type: number
+                      example: 10.74
+                    memory_utilization_percent:
+                      type: number
+                      example: 12.07
+                    gpu_utilization_percent:
+                      type: number
+                      example: 10.0
+                    temperature_celsius:
+                      type: number
+                      example: 76.0
+                    power_watts:
+                      type: number
+                      example: 226.7
+                    power_limit_watts:
+                      type: number
+                      example: 300.0
+                    fan_speed_percent:
+                      type: number
+                      example: 91.0
+        results:
+          type: array
+          items:
+            type: object
+            description: "Benchmark result data"
+            properties:
+              model_name:
+                type: string
+                example: "yolov5s"
+              model_size:
+                type: string
+                example: "small"
+              dataset:
+                type: string
+                example: "waymo"
+              metrics:
+                type: object
+                properties:
+                  inference_time_ms:
+                    type: number
+                    example: 45.2
+                  fps:
+                    type: number
+                    example: 22.1
+                  memory_usage_mb:
+                    type: number
+                    example: 512.3
+                  cpu_usage_percent:
+                    type: number
+                    example: 15.7
+                  gpu_memory_mb:
+                    type: number
+                    example: 1024.5
+                  throughput:
+                    type: number
+                    example: 18.9
+                  latency_p50:
+                    type: number
+                    example: 42.1
+                  latency_p95:
+                    type: number
+                    example: 78.5
+                  latency_p99:
+                    type: number
+                    example: 125.3
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - timestamp
+        - system_info
+        - results
+
+    BenchmarkCreateRequest:
+      type: object
+      properties:
+        training_uuid:
+          type: string
+          example: "training-uuid-123"
+        epoch_uuid:
+          type: string
+          example: "epoch-uuid-456"
+        epoch:
+          type: integer
+          example: 100
+        timestamp:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00.000Z"
+        system_info:
+          type: object
+          description: "System information and hardware details"
+        results:
+          type: array
+          items:
+            type: object
+            description: "Benchmark result data"
+      required:
+        - timestamp
+        - system_info
+        - results
+
+    BenchmarkUpdateRequest:
+      type: object
+      properties:
+        training_uuid:
+          type: string
+          example: "training-uuid-123"
+        epoch_uuid:
+          type: string
+          example: "epoch-uuid-456"
+        epoch:
+          type: integer
+          example: 100
+        timestamp:
+          type: string
+          format: date-time
+          example: "2023-01-01T00:00:00.000Z"
+        system_info:
+          type: object
+          description: "Updated system information"
+        results:
+          type: array
+          items:
+            type: object
+            description: "Updated benchmark results"
+
+    BenchmarksResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            benchmarks:
+              type: array
+              items:
+                $ref: '#/components/schemas/Benchmark'
+            pagination:
+              type: object
+              properties:
+                page:
+                  type: integer
+                  example: 1
+                limit:
+                  type: integer
+                  example: 50
+                total:
+                  type: integer
+                  example: 100
+                pages:
+                  type: integer
+                  example: 2
+            total:
+              type: integer
+              example: 100
+      required:
+        - success
+        - data
+
+    BenchmarkStatsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            totalBenchmarks:
+              type: integer
+              example: 150
+            averageInferenceTime:
+              type: number
+              example: 42.5
+            averageFPS:
+              type: number
+              example: 23.6
+            averageMemoryUsage:
+              type: number
+              example: 487.2
+            modelStats:
+              type: object
+              description: "Statistics grouped by model"
+              example:
+                yolov5s:
+                  count: 45
+                  avg_fps: 28.3
+                  avg_inference_time: 35.4
+                yolov5m:
+                  count: 32
+                  avg_fps: 19.8
+                  avg_inference_time: 50.5
+            systemStats:
+              type: object
+              description: "System performance statistics"
+              example:
+                avg_cpu_percent: 12.3
+                avg_memory_percent: 65.7
+                avg_gpu_utilization: 45.2
+      required:
+        - success
+        - data
+
+    Comparison:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          example: "YOLOv5 vs YOLOv8 Comparison"
+        description:
+          type: string
+          example: "Comparing YOLOv5 and YOLOv8 performance on Waymo dataset"
+        type:
+          type: string
+          enum: ["trainings", "tests", "benchmarks", "epochs"]
+          example: "trainings"
+        itemIds:
+          type: array
+          items:
+            type: string
+          example: ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - name
+        - type
+        - itemIds
+
+    ComparisonCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "YOLOv5 vs YOLOv8 Comparison"
+        description:
+          type: string
+          example: "Comparing YOLOv5 and YOLOv8 performance on Waymo dataset"
+        type:
+          type: string
+          enum: ["trainings", "tests", "benchmarks", "epochs"]
+          example: "trainings"
+        itemIds:
+          type: array
+          items:
+            type: string
+          example: ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"]
+      required:
+        - name
+        - type
+        - itemIds
+
+    ComparisonUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Updated Comparison Name"
+        description:
+          type: string
+          example: "Updated comparison description"
+        type:
+          type: string
+          enum: ["trainings", "tests", "benchmarks", "epochs"]
+          example: "trainings"
+        itemIds:
+          type: array
+          items:
+            type: string
+          example: ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012", "507f1f77bcf86cd799439013"]
+      required:
+        - name
+        - type
+        - itemIds
+
+    ComparisonsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            comparisons:
+              type: array
+              items:
+                $ref: '#/components/schemas/Comparison'
+            pagination:
+              type: object
+              properties:
+                page:
+                  type: integer
+                  example: 1
+                limit:
+                  type: integer
+                  example: 50
+                total:
+                  type: integer
+                  example: 100
+                pages:
+                  type: integer
+                  example: 2
+            total:
+              type: integer
+              example: 100
       required:
         - success
         - data
@@ -3861,6 +4254,430 @@ paths:
                 $ref: '#/components/schemas/SuccessResponse'
         '404':
           description: Visualization not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Benchmark Endpoints
+  /benchmarks:
+    get:
+      tags:
+        - Benchmarks
+      summary: Get all benchmarks
+      description: Retrieve all benchmark results with pagination and optional filtering
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of benchmarks per page
+        - name: model_name
+          in: query
+          schema:
+            type: string
+          description: Filter by model name
+        - name: dataset
+          in: query
+          schema:
+            type: string
+          description: Filter by dataset name
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: ["timestamp", "model_name", "fps", "inference_time"]
+            default: "timestamp"
+          description: Sort field
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: ["asc", "desc"]
+            default: "desc"
+          description: Sort order
+      responses:
+        '200':
+          description: Benchmarks retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BenchmarksResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Benchmarks
+      summary: Create benchmark
+      description: Create a new benchmark result
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BenchmarkCreateRequest'
+      responses:
+        '201':
+          description: Benchmark created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /benchmarks/upload:
+    post:
+      tags:
+        - Benchmarks
+      summary: Upload benchmark from JSON
+      description: Upload benchmark data from JSON file or payload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: "Benchmark data in JSON format"
+      responses:
+        '201':
+          description: Benchmark uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /benchmarks/stats:
+    get:
+      tags:
+        - Benchmarks
+      summary: Get benchmark statistics
+      description: Retrieve aggregated statistics and analytics for all benchmark results
+      responses:
+        '200':
+          description: Benchmark statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BenchmarkStatsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /benchmarks/{id}:
+    get:
+      tags:
+        - Benchmarks
+      summary: Get benchmark by ID
+      description: Retrieve a specific benchmark result by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Benchmark ID
+      responses:
+        '200':
+          description: Benchmark retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Benchmark not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - Benchmarks
+      summary: Update benchmark
+      description: Update an existing benchmark result
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Benchmark ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BenchmarkUpdateRequest'
+      responses:
+        '200':
+          description: Benchmark updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Benchmark not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Benchmarks
+      summary: Delete benchmark
+      description: Delete a benchmark result by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Benchmark ID
+      responses:
+        '200':
+          description: Benchmark deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Benchmark not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Comparison Endpoints
+  /comparisons:
+    get:
+      tags:
+        - Comparisons
+      summary: Get all comparisons
+      description: Retrieve all saved comparisons with pagination and filtering
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Number of comparisons per page
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search query for name or description
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: ["trainings", "tests", "benchmarks", "epochs"]
+          description: Filter by comparison type
+      responses:
+        '200':
+          description: Comparisons retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComparisonsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Comparisons
+      summary: Create comparison
+      description: Create a new comparison
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComparisonCreateRequest'
+      responses:
+        '201':
+          description: Comparison created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /comparisons/{id}:
+    get:
+      tags:
+        - Comparisons
+      summary: Get comparison by ID
+      description: Retrieve a specific comparison by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Comparison ID
+      responses:
+        '200':
+          description: Comparison retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Comparison not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - Comparisons
+      summary: Update comparison
+      description: Update an existing comparison
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Comparison ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComparisonUpdateRequest'
+      responses:
+        '200':
+          description: Comparison updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Comparison not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Comparisons
+      summary: Delete comparison
+      description: Delete a comparison by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Comparison ID
+      responses:
+        '200':
+          description: Comparison deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Comparison not found
           content:
             application/json:
               schema:

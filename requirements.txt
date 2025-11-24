@@ -12,3 +12,5 @@ matplotlib
 Pillow
 psutil
 nvidia-ml-py
+thop
+fvcore

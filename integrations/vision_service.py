@@ -223,6 +223,69 @@ def send_test_results_from_file(results_file_path):
         print(f"Unexpected error when uploading test results: {e}")
         return False
 
+def send_benchmark_results_from_file(results_file_path, training_uuid=None, epoch_uuid=None, epoch=None):
+    """
+    Send benchmark results from a logged JSON file to the vision service.
+    
+    Args:
+        results_file_path (str): Path to the JSON file containing benchmark results
+        training_uuid (str, optional): UUID of the training run this benchmark belongs to
+        epoch_uuid (str, optional): UUID of the epoch this benchmark belongs to
+        epoch (int, optional): Epoch number this benchmark belongs to
+    
+    Returns:
+        bool: True if successful, False if failed
+    """
+    try:
+        # Read the logged JSON file
+        with open(results_file_path, 'r') as f:
+            data = json.load(f)
+        
+        # Convert timestamp to ISO format if needed
+        timestamp = data.get('timestamp')
+        if timestamp and 'T' not in timestamp:
+            # Convert '2023-01-01 00:00:00' to '2023-01-01T00:00:00.000Z'
+            dt = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+            timestamp = dt.isoformat() + '.000Z'
+        
+        payload = {
+            'timestamp': timestamp,
+            'system_info': data.get('system_info', {}),
+            'results': data.get('results', [])
+        }
+        
+        # Add optional fields if provided
+        if training_uuid:
+            payload['training_uuid'] = training_uuid
+        if epoch_uuid:
+            payload['epoch_uuid'] = epoch_uuid
+        if epoch is not None:
+            payload['epoch'] = epoch
+        
+        url = f"{VISION_API_BASE_URL}/benchmarks"
+        
+        response = requests.post(url, json=payload, timeout=30)
+        response.raise_for_status()
+        response_data = response.json()
+        if response_data.get("success"):
+            print(f"Successfully uploaded benchmark results to vision service")
+            return True
+        else:
+            print(f"Failed to upload benchmark results: {response_data.get('message')}")
+            return False
+    except FileNotFoundError:
+        print(f"Benchmark results file not found: {results_file_path}")
+        return False
+    except json.JSONDecodeError as e:
+        print(f"Failed to parse benchmark results JSON file: {e}")
+        return False
+    except requests.exceptions.RequestException as e:
+        print(f"Request failed when uploading benchmark results: {e}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error when uploading benchmark results: {e}")
+        return False
+
 def upload_visualization(epoch_uuid, file_path, viz_type, metadata=None):
     """
     Upload a visualization file to the vision service.
@@ -242,6 +305,89 @@ def upload_visualization(epoch_uuid, file_path, viz_type, metadata=None):
         dict or None: Visualization data if successful, None if failed
     """
     if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return None
+    
+    filename = os.path.basename(file_path)
+    file_size = os.path.getsize(file_path)
+    
+    # Determine mimetype based on extension
+    ext = os.path.splitext(file_path)[1].lower()
+    mimetype_map = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg'
+    }
+    mimetype = mimetype_map.get(ext, 'image/png')
+    
+    try:
+        # Step 1: Get signed upload URL
+        viz_uuid = str(uuid.uuid4())
+        upload_url_request = {
+            "epoch_uuid": epoch_uuid,
+            "filename": filename,
+            "type": viz_type,
+            "mimetype": mimetype
+        }
+        
+        url = f"{VISION_API_BASE_URL}/visualizations/upload-url"
+        response = requests.post(url, json=upload_url_request, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if not data.get("success"):
+            print(f"Failed to get upload URL: {data.get('message')}")
+            return None
+        
+        upload_url = data["data"]["uploadUrl"]
+        viz_uuid = data["data"]["visualization_uuid"]
+        minio_file_id = data["data"]["minioFileId"]
+        
+        # Step 2: Upload file to MinIO
+        with open(file_path, 'rb') as f:
+            upload_response = requests.put(
+                upload_url, 
+                data=f,
+                headers={'Content-Type': mimetype},
+                timeout=30
+            )
+            upload_response.raise_for_status()
+        
+        # Step 3: Create visualization record
+        create_request = {
+            "epoch_uuid": epoch_uuid,
+            "visualization_uuid": viz_uuid,
+            "filename": filename,
+            "type": viz_type,
+            "minioFileId": minio_file_id,
+            "mimetype": mimetype,
+            "size": file_size
+        }
+        
+        if metadata:
+            create_request["metadata"] = metadata
+        
+        url = f"{VISION_API_BASE_URL}/visualizations"
+        response = requests.post(url, json=create_request, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("success"):
+            print(f"Successfully uploaded {viz_type} visualization: {filename}")
+            return data.get("data")
+        else:
+            print(f"Failed to create visualization record: {data.get('message')}")
+            return None
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Request failed when uploading visualization: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Response status: {e.response.status_code}")
+            print(f"Response body: {e.response.text}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error when uploading visualization: {e}")
+        return None
         print(f"File not found: {file_path}")
         return None
     

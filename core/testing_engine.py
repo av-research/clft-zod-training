@@ -8,7 +8,6 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from utils.helpers import relabel_annotation
-from utils.metrics import auc_ap
 
 
 class TestingEngine:
@@ -25,13 +24,12 @@ class TestingEngine:
         """Run testing on a dataloader and return results."""
         self.model.eval()
         
-        # Initialize accumulators
+        # Initialize accumulators for IoU/precision/recall
         accumulators = self.metrics_calc.create_accumulators(self.device)
         
-        # Initialize per-class metrics for AP calculation
-        num_eval_classes = len(self.metrics_calc.eval_classes)
-        class_pre = torch.zeros((len(dataloader), num_eval_classes), dtype=torch.float)
-        class_rec = torch.zeros((len(dataloader), num_eval_classes), dtype=torch.float)
+        # Initialize storage for AP calculation (pixel-wise predictions and targets)
+        all_predictions = {cls: [] for cls in self.metrics_calc.eval_classes}
+        all_targets = {cls: [] for cls in self.metrics_calc.eval_classes}
         
         # Track inference time
         total_inference_time = 0.0
@@ -71,21 +69,17 @@ class TestingEngine:
                 # Relabel annotation
                 anno = relabel_annotation(anno.cpu(), self.config).squeeze(0).to(self.device)
                 
-                # Update accumulators
+                # Update accumulators for IoU/precision/recall
                 batch_overlap, batch_pred, batch_label, batch_union = self.metrics_calc.update_accumulators(
                     accumulators, output_seg, anno, num_classes
                 )
                 
-                # Calculate batch metrics for AP (use batch-specific values)
-                batch_IoU = 1.0 * batch_overlap / (np.spacing(1) + batch_union)
-                batch_precision = 1.0 * batch_overlap / (np.spacing(1) + batch_pred)
-                batch_recall = 1.0 * batch_overlap / (np.spacing(1) + batch_label)
+                # Store predictions and targets for AP calculation
+                self._store_predictions_for_ap(output_seg, anno, all_predictions, all_targets)
                 
-                # Store metrics for eval classes
+                # Calculate batch metrics for progress bar
+                batch_IoU = 1.0 * batch_overlap / (np.spacing(1) + batch_union)
                 array_indices = self._get_array_indices()
-                for j, array_idx in enumerate(array_indices):
-                    class_pre[i, j] = batch_precision[array_idx]
-                    class_rec[i, j] = batch_recall[array_idx]
                 
                 # Update progress bar
                 progress_desc = ' '.join([
@@ -94,8 +88,8 @@ class TestingEngine:
                 ])
                 progress_bar.set_description(progress_desc)
         
-        # Compute final metrics
-        results = self._compute_final_results(accumulators, class_pre, class_rec)
+        # Compute final metrics including proper AP
+        results = self._compute_final_results(accumulators, all_predictions, all_targets)
         
         # Print results
         self._print_results(results)
@@ -125,8 +119,41 @@ class TestingEngine:
         else:
             return self.metrics_calc.eval_indices
     
-    def _compute_final_results(self, accumulators, class_pre, class_rec):
-        """Compute final test results."""
+    def _store_predictions_for_ap(self, output_seg, anno, all_predictions, all_targets):
+        """Store pixel-wise predictions and targets for AP calculation."""
+        # Apply softmax to get probabilities
+        probs = torch.softmax(output_seg, dim=1)  # Shape: [batch, classes, H, W]
+        
+        # Get predictions (argmax) and targets
+        preds = torch.argmax(output_seg, dim=1)  # Shape: [batch, H, W]
+        
+        # For each evaluation class
+        for cls_idx, cls_name in enumerate(self.metrics_calc.eval_classes):
+            # Get the training index for this class
+            train_idx = self.metrics_calc.eval_indices[cls_idx]
+            
+            # Get probabilities for this class
+            cls_probs = probs[:, train_idx, :, :]  # Shape: [batch, H, W]
+            
+            # Get binary predictions and targets for this class
+            cls_preds = (preds == train_idx).float()  # Shape: [batch, H, W]
+            cls_targets = (anno == train_idx).float()  # Shape: [batch, H, W]
+            
+            # Flatten and store
+            cls_probs_flat = cls_probs.flatten()
+            cls_preds_flat = cls_preds.flatten()
+            cls_targets_flat = cls_targets.flatten()
+            
+            # Only store pixels that are predicted as this class OR are actually this class
+            # This ensures we have both true positives and false positives
+            relevant_mask = (cls_preds_flat > 0) | (cls_targets_flat > 0)
+            
+            if relevant_mask.sum() > 0:
+                all_predictions[cls_name].append(cls_probs_flat[relevant_mask])
+                all_targets[cls_name].append(cls_targets_flat[relevant_mask])
+    
+    def _compute_final_results(self, accumulators, all_predictions, all_targets):
+        """Compute final test results with proper AP calculation."""
         cum_IoU = accumulators['overlap'] / accumulators['union']
         cum_precision = accumulators['overlap'] / accumulators['pred']
         cum_recall = accumulators['overlap'] / accumulators['label']
@@ -151,8 +178,8 @@ class TestingEngine:
                 f1 = 0.0
             f1 = self.metrics_calc.sanitize_value(f1)
             
-            # Calculate AP
-            ap = auc_ap(class_pre[:, i], class_rec[:, i])
+            # Calculate proper AP using stored predictions
+            ap = self._compute_ap_for_class(cls, all_predictions, all_targets)
             ap = self.metrics_calc.sanitize_value(ap)
             
             results[cls] = {
@@ -164,6 +191,64 @@ class TestingEngine:
             }
         
         return results
+    
+    def _compute_ap_for_class(self, cls_name, all_predictions, all_targets):
+        """Compute Average Precision for a single class using proper method."""
+        if cls_name not in all_predictions or not all_predictions[cls_name]:
+            return 0.0
+        
+        # Concatenate all predictions and targets for this class
+        pred_probs = torch.cat(all_predictions[cls_name])  # All predicted probabilities
+        pred_targets = torch.cat(all_targets[cls_name])    # All ground truth labels
+        
+        if len(pred_probs) == 0:
+            return 0.0
+        
+        # Sort by prediction confidence (descending)
+        sorted_indices = torch.argsort(pred_probs, descending=True)
+        pred_probs = pred_probs[sorted_indices]
+        pred_targets = pred_targets[sorted_indices]
+        
+        # Calculate precision and recall at different thresholds
+        num_positives = pred_targets.sum().item()
+        if num_positives == 0:
+            return 0.0
+        
+        # Calculate cumulative true positives and false positives
+        tp = torch.cumsum(pred_targets, dim=0).float()
+        fp = torch.cumsum(1 - pred_targets, dim=0).float()
+        
+        # Calculate precision and recall
+        precision = tp / (tp + fp + 1e-6)
+        recall = tp / num_positives
+        
+        # Use VOC 2010 AP calculation method
+        ap = self._voc_ap(recall, precision)
+        return ap
+    
+    def _voc_ap(self, recall, precision):
+        """Calculate AP using VOC 2010 method."""
+        if len(recall) == 0:
+            return 0.0
+        
+        # Convert to numpy
+        recall = recall.cpu().numpy()
+        precision = precision.cpu().numpy()
+        
+        # Add sentinel values
+        mrec = np.concatenate(([0.0], recall, [1.0]))
+        mpre = np.concatenate(([0.0], precision, [0.0]))
+        
+        # Make precision monotonically decreasing
+        for i in range(len(mpre) - 1, 0, -1):
+            mpre[i - 1] = np.maximum(mpre[i - 1], mpre[i])
+        
+        # Find points where recall changes
+        i = np.where(mrec[1:] != mrec[:-1])[0]
+        
+        # Calculate AP
+        ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
+        return ap
     
     def _print_results(self, results):
         """Print test results."""

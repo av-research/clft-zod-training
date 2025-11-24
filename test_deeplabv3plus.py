@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from models.deeplabv3plus import build_deeplabv3plus
 from core.metrics_calculator import MetricsCalculator
-from utils.metrics import find_overlap_exclude_bg_ignore, auc_ap
+from utils.metrics import find_overlap_exclude_bg_ignore
 from utils.helpers import get_model_path
 from integrations.vision_service import send_test_results_from_file
 
@@ -31,6 +31,103 @@ def calculate_num_eval_classes(config, num_classes):
     """Calculate number of evaluation classes (excludes background)."""
     eval_count = sum(1 for cls in config['Dataset']['train_classes'] if cls['index'] > 0)
     return eval_count
+
+
+def _store_predictions_for_ap(output_seg, anno, all_predictions, all_targets, eval_classes, config):
+    """Store pixel-wise predictions and targets for AP calculation."""
+    # Apply softmax to get probabilities
+    probs = torch.softmax(output_seg, dim=1)  # Shape: [batch, classes, H, W]
+    
+    # Get predictions (argmax) and targets
+    preds = torch.argmax(output_seg, dim=1)  # Shape: [batch, H, W]
+    
+    # Get eval indices from config
+    eval_indices = [cls['index'] for cls in config['Dataset']['train_classes'] if cls['index'] > 0]
+    
+    # For each evaluation class
+    for cls_idx, cls_name in enumerate(eval_classes):
+        # Get the training index for this class
+        train_idx = eval_indices[cls_idx]
+        
+        # Get probabilities for this class
+        cls_probs = probs[:, train_idx, :, :]  # Shape: [batch, H, W]
+        
+        # Get binary predictions and targets for this class
+        cls_preds = (preds == train_idx).float()  # Shape: [batch, H, W]
+        cls_targets = (anno == train_idx).float()  # Shape: [batch, H, W]
+        
+        # Flatten and store
+        cls_probs_flat = cls_probs.flatten()
+        cls_preds_flat = cls_preds.flatten()
+        cls_targets_flat = cls_targets.flatten()
+        
+        # Only store pixels that are predicted as this class OR are actually this class
+        # This ensures we have both true positives and false positives
+        relevant_mask = (cls_preds_flat > 0) | (cls_targets_flat > 0)
+        
+        if relevant_mask.sum() > 0:
+            all_predictions[cls_name].append(cls_probs_flat[relevant_mask])
+            all_targets[cls_name].append(cls_targets_flat[relevant_mask])
+
+
+def _compute_ap_for_class(cls_name, all_predictions, all_targets):
+    """Compute Average Precision for a single class using proper method."""
+    if cls_name not in all_predictions or not all_predictions[cls_name]:
+        return 0.0
+    
+    # Concatenate all predictions and targets for this class
+    pred_probs = torch.cat(all_predictions[cls_name])  # All predicted probabilities
+    pred_targets = torch.cat(all_targets[cls_name])    # All ground truth labels
+    
+    if len(pred_probs) == 0:
+        return 0.0
+    
+    # Sort by prediction confidence (descending)
+    sorted_indices = torch.argsort(pred_probs, descending=True)
+    pred_probs = pred_probs[sorted_indices]
+    pred_targets = pred_targets[sorted_indices]
+    
+    # Calculate precision and recall at different thresholds
+    num_positives = pred_targets.sum().item()
+    if num_positives == 0:
+        return 0.0
+    
+    # Calculate cumulative true positives and false positives
+    tp = torch.cumsum(pred_targets, dim=0).float()
+    fp = torch.cumsum(1 - pred_targets, dim=0).float()
+    
+    # Calculate precision and recall
+    precision = tp / (tp + fp + 1e-6)
+    recall = tp / num_positives
+    
+    # Use VOC 2010 AP calculation method
+    ap = _voc_ap(recall, precision)
+    return ap
+
+
+def _voc_ap(recall, precision):
+    """Calculate AP using VOC 2010 method."""
+    if len(recall) == 0:
+        return 0.0
+    
+    # Convert to numpy
+    recall = recall.cpu().numpy()
+    precision = precision.cpu().numpy()
+    
+    # Add sentinel values
+    mrec = np.concatenate(([0.0], recall, [1.0]))
+    mpre = np.concatenate(([0.0], precision, [0.0]))
+    
+    # Make precision monotonically decreasing
+    for i in range(len(mpre) - 1, 0, -1):
+        mpre[i - 1] = np.maximum(mpre[i - 1], mpre[i])
+    
+    # Find points where recall changes
+    i = np.where(mrec[1:] != mrec[:-1])[0]
+    
+    # Calculate AP
+    ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
+    return ap
 
 
 def setup_dataset(config):
@@ -67,10 +164,10 @@ def test_model(model, dataloader, metrics_calc, device, config, num_classes, mod
     total_inference_time = 0.0
     total_samples = 0
     
-    # Initialize per-class metrics for AP calculation
-    num_eval_classes = len(metrics_calc.eval_classes)
-    class_pre = torch.zeros((len(dataloader), num_eval_classes), dtype=torch.float)
-    class_rec = torch.zeros((len(dataloader), num_eval_classes), dtype=torch.float)
+    # Initialize storage for proper AP calculation (pixel-wise predictions and targets)
+    eval_classes = [cls['name'] for cls in config['Dataset']['train_classes'] if cls['index'] > 0]
+    all_predictions = {cls: [] for cls in eval_classes}
+    all_targets = {cls: [] for cls in eval_classes}
     
     with torch.no_grad():
         for i, batch in enumerate(tqdm(dataloader, desc="Testing")):
@@ -109,26 +206,19 @@ def test_model(model, dataloader, metrics_calc, device, config, num_classes, mod
                 accumulators, pred, anno, num_classes
             )
             
-            # Calculate batch metrics for AP
-            batch_IoU = 1.0 * batch_overlap / (np.spacing(1) + batch_union)
-            batch_precision = 1.0 * batch_overlap / (np.spacing(1) + batch_pred)
-            batch_recall = 1.0 * batch_overlap / (np.spacing(1) + batch_label)
-            
-            # Store metrics for eval classes
-            array_indices = [idx - 1 for idx in metrics_calc.eval_indices]  # Assuming ZOD dataset
-            for j, array_idx in enumerate(array_indices):
-                class_pre[i, j] = batch_precision[array_idx]
-                class_rec[i, j] = batch_recall[array_idx]
+            # Store predictions and targets for proper AP calculation
+            _store_predictions_for_ap(pred, anno, all_predictions, all_targets, eval_classes, config)
             
             num_batches += 1
     
     # Compute metrics
     metrics = metrics_calc.compute_epoch_metrics(accumulators, total_loss, num_batches)
     
-    # Add AP calculation
+    # Add proper AP calculation
+    num_eval_classes = len(eval_classes)
     metrics['ap'] = torch.zeros(num_eval_classes)
-    for i in range(num_eval_classes):
-        ap = auc_ap(class_pre[:, i], class_rec[:, i])
+    for i, cls_name in enumerate(eval_classes):
+        ap = _compute_ap_for_class(cls_name, all_predictions, all_targets)
         metrics['ap'][i] = ap
     
     # Add inference time statistics
