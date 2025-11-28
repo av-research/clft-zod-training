@@ -15,3 +15,4 @@ source venv/bin/activate
 python3 train_deeplabv3plus.py --config $1
 python3 test_deeplabv3plus.py --config $1
 python3 visualize_deeplabv3plus.py --config $1 --upload
+python3 benchmark.py --config $1

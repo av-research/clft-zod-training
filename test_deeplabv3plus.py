@@ -144,10 +144,7 @@ def _voc_ap(recall, precision):
 
 def setup_dataset(config):
     """Setup dataset based on configuration."""
-    if config['Dataset']['name'] == 'zod':
-        from tools.dataset_png import DatasetPNG as Dataset
-    else:
-        from tools.dataset import Dataset
+    from tools.dataset_png import DatasetPNG as Dataset
     return Dataset
 
 
@@ -458,7 +455,8 @@ def main():
             batch_size=config['General']['batch_size'],
             shuffle=False,
             pin_memory=True,
-            num_workers=4
+            num_workers=4,
+            persistent_workers=True
         )
         
         test_metrics = test_model(model, test_dataloader, metrics_calc, device, config, num_classes, modality, is_fusion)

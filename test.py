@@ -45,10 +45,7 @@ def calculate_num_eval_classes(config, num_classes):
 
 def setup_dataset(config):
     """Setup dataset based on configuration."""
-    if config['Dataset']['name'] == 'zod':
-        from tools.dataset_png import DatasetPNG as Dataset
-    else:
-        from tools.dataset import Dataset
+    from tools.dataset_png import DatasetPNG as Dataset
     return Dataset
 
 
@@ -118,14 +115,27 @@ def run_test_suite(tester, config, test_data_files, test_data_path, num_classes)
         path = os.path.join(test_data_path, file)
         print(f"Testing with: {path}")
         
+        # Check if test file exists
+        if not os.path.exists(path):
+            print(f"Test file not found: {path}, skipping")
+            continue
+        
         # Create dataset and dataloader
         test_data = Dataset(config, 'test', path)
+        
+        # Check if test file has zero rows
+        if len(test_data) == 0:
+            print(f"Test file is empty: {path}, skipping")
+            continue
+        
         test_dataloader = DataLoader(
             test_data,
             batch_size=config['General']['batch_size'],
             shuffle=False,
             pin_memory=True,
-            drop_last=True
+            drop_last=True,
+            num_workers=4,
+            persistent_workers=True
         )
         
         # Get modality

@@ -25,16 +25,14 @@ class DataLoader:
     
     def _setup_lidar_normalization(self):
         """Setup dataset-specific LiDAR normalization."""
-        if self.dataset_name == 'waymo':
-            self.lidar_mean = self.config['Dataset']['transforms'].get(
-                'lidar_mean_waymo', [-0.17263354, 0.85321806, 24.5527253]
-            )
-            self.lidar_std = self.config['Dataset']['transforms'].get(
-                'lidar_std_waymo', [7.34546552, 1.17227659, 15.83745082]
-            )
-        else:  # ZOD
-            self.lidar_mean = self.config['Dataset']['transforms']['lidar_mean']
-            self.lidar_std = self.config['Dataset']['transforms']['lidar_std']
+        self.lidar_mean = self.config['Dataset']['transforms'].get(
+            'lidar_mean', 
+            self.config['Dataset']['transforms']['lidar_mean_waymo']
+        )
+        self.lidar_std = self.config['Dataset']['transforms'].get(
+            'lidar_std', 
+            self.config['Dataset']['transforms']['lidar_std_waymo']
+        )
     
     def load_rgb(self, image_path):
         """Load and preprocess RGB image."""
@@ -87,23 +85,12 @@ class DataLoader:
         return lidar_tensor
     
     def _load_waymo_lidar(self, lidar_path):
-        """Load Waymo LiDAR from PKL file."""
-        points_set, camera_coord = open_lidar(
-            lidar_path,
-            w_ratio=4, h_ratio=4,
-            lidar_mean=self.lidar_mean,
-            lidar_std=self.lidar_std
-        )
+        """Load Waymo LiDAR from PNG projection."""
+        lidar_pil = Image.open(lidar_path)
+        lidar_tensor = TF.to_tensor(lidar_pil)
         
-        # Create projection
-        X, Y, Z = get_unresized_lid_img_val(320, 480, points_set, camera_coord)
-        
-        # Convert to tensor
-        lidar_tensor = torch.cat([
-            TF.to_tensor(X),
-            TF.to_tensor(Y),
-            TF.to_tensor(Z)
-        ], dim=0)
+        # For Waymo PNG data, do NOT apply normalization (matches training)
+        # The PNG values are already in the expected range
         
         lidar_tensor = transforms.Resize((self.resize, self.resize))(lidar_tensor)
         

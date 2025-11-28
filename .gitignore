@@ -24,7 +24,10 @@ ipython/test_img
 ipython/*.png
 test_images/*
 zod_dataset/annotation
-zod_dataset/annotation_lidar
+zod_dataset/annotation_lidar_only
 zod_dataset/lidar_png
 zod_dataset/camera
-zod_dataset/annotation_balanced
+zod_dataset/annotation_camera_only
+zod_dataset/annotation_fusion
+waymo_dataset/labeled
+venv

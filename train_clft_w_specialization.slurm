@@ -1,5 +1,5 @@
 #!/bin/bash 
-#SBATCH --job-name=w-c-spec                ### job name
+#SBATCH --job-name=w-spec                ### job name
 #SBATCH -n 1
 #SBATCH -p gpu                  ### use gpu
 #SBATCH --gres=gpu:A100:1               ### specifying the GPU type
@@ -16,23 +16,29 @@ source venv/bin/activate
 python train.py --config config/waymo_hpc/clft/human_sign.json
 python test.py --config config/waymo_hpc/clft/human_sign.json
 python visualize.py --config config/waymo_hpc/clft/human_sign.json --upload
+python benchmark.py --config config/waymo_hpc/clft/human_sign.json
 
 python train.py --config config/waymo_hpc/clft/human_specialization.json
 python test.py --config config/waymo_hpc/clft/human_specialization.json
 python visualize.py --config config/waymo_hpc/clft/human_specialization.json --upload
+python benchmark.py --config config/waymo_hpc/clft/human_specialization.json
 
 python train.py --config config/waymo_hpc/clft/human_vehicle.json
 python test.py --config config/waymo_hpc/clft/human_vehicle.json
 python visualize.py --config config/waymo_hpc/clft/human_vehicle.json --upload
+python benchmark.py --config config/waymo_hpc/clft/human_vehicle.json
 
 python train.py --config config/waymo_hpc/clft/sign_specialization.json
 python test.py --config config/waymo_hpc/clft/sign_specialization.json
 python visualize.py --config config/waymo_hpc/clft/sign_specialization.json --upload
+python benchmark.py --config config/waymo_hpc/clft/sign_specialization.json
 
 python train.py --config config/waymo_hpc/clft/vehicle_sign.json
 python test.py --config config/waymo_hpc/clft/vehicle_sign.json
 python visualize.py --config config/waymo_hpc/clft/vehicle_sign.json --upload
+python benchmark.py --config config/waymo_hpc/clft/vehicle_sign.json
 
 python train.py --config config/waymo_hpc/clft/vehicle_specialization.json
 python test.py --config config/waymo_hpc/clft/vehicle_specialization.json
 python visualize.py --config config/waymo_hpc/clft/vehicle_specialization.json --upload
+python benchmark.py --config config/waymo_hpc/clft/vehicle_specialization.json

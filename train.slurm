@@ -15,3 +15,4 @@ source venv/bin/activate
 python3 train.py --config $1
 python3 test.py --config $1
 python3 visualize.py --config $1 --upload
+python3 benchmark.py --config $1

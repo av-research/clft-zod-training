@@ -45,6 +45,15 @@ class Visualizer:
         
         # Load original image
         rgb_cv2 = cv2.imread(rgb_path)
+        if rgb_cv2 is None:
+            print(f'Warning: Could not load RGB image {rgb_path}')
+            if not os.path.exists(rgb_path):
+                print(f'File does not exist: {rgb_path}')
+            else:
+                print(f'File exists but could not be read (possibly corrupted)')
+            print('Skipping overlay for this image')
+            return
+        
         h, w = rgb_cv2.shape[:2]
         
         # Resize segmentation to original dimensions

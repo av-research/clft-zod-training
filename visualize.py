@@ -50,7 +50,7 @@ def get_lidar_path(cam_path, dataset_name):
     if dataset_name == 'zod':
         return cam_path.replace('/camera', '/lidar_png')
     else:  # waymo
-        return cam_path.replace('/camera/', '/lidar/').replace('.png', '.pkl')
+        return cam_path.replace('/camera/', '/lidar_png/')
 
 
 def prepare_model_inputs(rgb, lidar, modality):
@@ -92,7 +92,12 @@ def process_images(model, data_loader, visualizer, image_paths, dataroot,
         # Load data
         print(f'Processing image {idx}/{len(image_paths)}: {rgb_name}')
         rgb = data_loader.load_rgb(cam_path).to(device, non_blocking=True).unsqueeze(0)
-        lidar = data_loader.load_lidar(lidar_path).to(device, non_blocking=True).unsqueeze(0)
+        
+        # Only load LiDAR data if not in RGB-only mode
+        if modality == 'rgb':
+            lidar = rgb  # Use RGB as dummy LiDAR input to avoid unnecessary loading
+        else:
+            lidar = data_loader.load_lidar(lidar_path).to(device, non_blocking=True).unsqueeze(0)
         
         # Run inference
         with torch.no_grad():
@@ -147,7 +152,7 @@ def main():
     # Fix default path for waymo
     dataset_name = config['Dataset']['name']
     if args.path == 'zod_dataset/visualizations.txt' and dataset_name == 'waymo':
-        args.path = 'waymo_dataset/visual_run_demo.txt'
+        args.path = 'waymo_dataset/visualizations.txt'
     
     # Setup device
     device = torch.device(config['General']['device']

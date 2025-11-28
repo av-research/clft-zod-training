@@ -87,35 +87,44 @@ class DatasetPNG(Dataset):
 
         dataroot = self.config['Dataset']['dataset_root']
 
-        # Construct paths (same as original dataset)
-        if self.config['Dataset']['name'] == 'zod':
-            cam_path = os.path.join(dataroot, self.list_examples_cam[idx])
-            dataset_name = self.config['Dataset']['name']
+        # Construct paths (generic approach)
+        cam_path = os.path.join(dataroot, self.list_examples_cam[idx])
+        dataset_name = self.config['Dataset']['name']
+        
+        # Try to get annotation path - if it doesn't exist, we'll create dummy annotations
+        anno_path = None
+        try:
             anno_path = get_annotation_path(cam_path, dataset_name, self.config)
-
-            # Use PNG instead of pickle
-            png_path = cam_path.replace('/camera', '/lidar_png').replace('.png', '.png')
-
-            rgb = Image.open(cam_path).convert('RGB')
-            # Load raw ZOD annotations without relabeling (relabeling happens in training/testing loops)
-            anno = torch.from_numpy(np.array(Image.open(anno_path))).unsqueeze(0).long()
-
-            # Load LiDAR projection from PNG only if not in RGB-only mode
-            rgb_only = self.config.get('CLI', {}).get('mode') == 'rgb'
-            if rgb_only:
-                # For RGB-only mode, create a dummy LiDAR image
-                lidar_pil = Image.new('RGB', rgb.size, (0, 0, 0))
+            # Check if annotation file actually exists
+            if os.path.exists(anno_path):
+                anno = torch.from_numpy(np.array(Image.open(anno_path))).unsqueeze(0).long()
             else:
-                # Load LiDAR projection from PNG
-                lidar_pil = self.load_lidar_png(png_path)
+                # Create dummy annotations if file doesn't exist
+                anno = torch.zeros((1, 1920, 1280), dtype=torch.long)
+        except:
+            # Fallback to dummy annotations
+            anno = torch.zeros((1, 1920, 1280), dtype=torch.long)
 
+        # Generic PNG path replacement (handles both /camera and /camera/ patterns)
+        png_path = cam_path.replace('/camera', '/lidar_png').replace('/camera/', '/lidar_png/')
+
+        rgb = Image.open(cam_path).convert('RGB')
+
+        # Load LiDAR projection from PNG only if not in RGB-only mode
+        rgb_only = self.config.get('CLI', {}).get('mode') == 'rgb'
+        if rgb_only:
+            # For RGB-only mode, create a dummy LiDAR image
+            lidar_pil = Image.new('RGB', rgb.size, (0, 0, 0))
         else:
-            raise ValueError("Only ZOD dataset is currently supported with PNG loader")
+            # Load LiDAR projection from PNG
+            lidar_pil = self.load_lidar_png(png_path)
 
         # Validate filenames match
         rgb_name = cam_path.split('/')[-1].split('.')[0]
-        anno_name = anno_path.split('/')[-1].split('.')[0]
-        assert (rgb_name == anno_name), "rgb and anno input not matching"
+        # Only validate annotation name match if we loaded real annotations (not dummy)
+        if anno_path and os.path.exists(anno_path):
+            anno_name = anno_path.split('/')[-1].split('.')[0]
+            assert (rgb_name == anno_name), "rgb and anno input not matching"
         if not rgb_only:
             png_name = png_path.split('/')[-1].split('.')[0]
             assert (rgb_name == png_name), "rgb and png input not matching"

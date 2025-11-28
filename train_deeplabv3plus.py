@@ -39,10 +39,7 @@ def calculate_num_eval_classes(config, num_classes):
 
 def setup_dataset(config):
     """Setup dataset based on configuration."""
-    if config['Dataset']['name'] == 'zod':
-        from tools.dataset_png import DatasetPNG as Dataset
-    else:
-        from tools.dataset import Dataset
+    from tools.dataset_png import DatasetPNG as Dataset
     return Dataset
 
 

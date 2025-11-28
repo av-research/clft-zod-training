@@ -1,5 +1,5 @@
 #!/bin/bash 
-#SBATCH --job-name=z-c-base                ### job name
+#SBATCH --job-name=z-base                ### job name
 #SBATCH -n 1
 #SBATCH -p gpu                  ### use gpu
 #SBATCH --gres=gpu:A100:1               ### specifying the GPU type
@@ -16,35 +16,44 @@ source venv/bin/activate
 python train.py --config config/zod_hpc/config_1.json
 python test.py --config config/zod_hpc/config_1.json
 python visualize.py --config config/zod_hpc/config_1.json --upload
+python benchmark.py --config config/zod_hpc/config_1.json
 
 python train.py --config config/zod_hpc/config_2.json
 python test.py --config config/zod_hpc/config_2.json
 python visualize.py --config config/zod_hpc/config_2.json --upload
+python benchmark.py --config config/zod_hpc/config_2.json
 
 python train.py --config config/zod_hpc/config_3.json
 python test.py --config config/zod_hpc/config_3.json
 python visualize.py --config config/zod_hpc/config_3.json --upload
+python benchmark.py --config config/zod_hpc/config_3.json
 
 python train.py --config config/zod_hpc/config_4.json
 python test.py --config config/zod_hpc/config_4.json
 python visualize.py --config config/zod_hpc/config_4.json --upload
+python benchmark.py --config config/zod_hpc/config_4.json
 
 python train.py --config config/zod_hpc/config_5.json
 python test.py --config config/zod_hpc/config_5.json
 python visualize.py --config config/zod_hpc/config_5.json --upload
+python benchmark.py --config config/zod_hpc/config_5.json
 
 python train.py --config config/zod_hpc/config_6.json
 python test.py --config config/zod_hpc/config_6.json
 python visualize.py --config config/zod_hpc/config_6.json --upload
+python benchmark.py --config config/zod_hpc/config_6.json
 
 python train.py --config config/zod_hpc/config_7.json
 python test.py --config config/zod_hpc/config_7.json
 python visualize.py --config config/zod_hpc/config_7.json --upload
+python benchmark.py --config config/zod_hpc/config_7.json
 
 python train.py --config config/zod_hpc/config_8.json
 python test.py --config config/zod_hpc/config_8.json
 python visualize.py --config config/zod_hpc/config_8.json --upload
+python benchmark.py --config config/zod_hpc/config_8.json
 
 python train.py --config config/zod_hpc/config_9.json
 python test.py --config config/zod_hpc/config_9.json
 python visualize.py --config config/zod_hpc/config_9.json --upload
+python benchmark.py --config config/zod_hpc/config_9.json

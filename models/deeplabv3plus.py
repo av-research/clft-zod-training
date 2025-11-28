@@ -8,7 +8,6 @@ Supports RGB-only and late-fusion variants.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.models.segmentation import deeplabv3_resnet101
 from torchvision.models import resnet101, ResNet101_Weights
 
 

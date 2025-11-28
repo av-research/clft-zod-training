@@ -43,12 +43,9 @@ def calculate_num_eval_classes(config, num_classes):
     return eval_count
 
 
-def setup_dataset(config):
+def setup_dataset():
     """Setup dataset based on configuration."""
-    if config['Dataset']['name'] == 'zod':
-        from tools.dataset_png import DatasetPNG as Dataset
-    else:
-        from tools.dataset import Dataset
+    from tools.dataset_png import DatasetPNG as Dataset
     return Dataset
 
 
@@ -254,7 +251,7 @@ def main():
     start_epoch = load_checkpoint_if_resume(config, model, optimizer, device)
     
     # Setup datasets
-    Dataset = setup_dataset(config)
+    Dataset = setup_dataset()
     train_data = Dataset(config, 'train', config['Dataset']['train_split'])
     valid_data = Dataset(config, 'val', config['Dataset']['val_split'])
     
