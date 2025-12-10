@@ -3,8 +3,19 @@ import json
 import uuid
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
-VISION_API_BASE_URL = "https://vision-api.tumbaland.eu/api"
+# Load environment variables from .env file
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
+
+VISION_API_BASE_URL = "https://vision-api.visin.eu/api"
+
+def get_auth_headers():
+    """Get authorization headers for API requests."""
+    token = os.getenv('VISIN_TOKEN')
+    if token:
+        return {'Authorization': f'Bearer {token}'}
+    return {}
 
 def upload_visualization(epoch_uuid, file_path, viz_type, metadata=None):
     """
@@ -51,7 +62,7 @@ def upload_visualization(epoch_uuid, file_path, viz_type, metadata=None):
         }
         
         url = f"{VISION_API_BASE_URL}/visualizations/upload-url"
-        response = requests.post(url, json=upload_url_request, timeout=10)
+        response = requests.post(url, json=upload_url_request, headers=get_auth_headers(), timeout=10, verify=False)
         response.raise_for_status()
         data = response.json()
         
@@ -88,7 +99,7 @@ def upload_visualization(epoch_uuid, file_path, viz_type, metadata=None):
             create_request["metadata"] = metadata
         
         url = f"{VISION_API_BASE_URL}/visualizations"
-        response = requests.post(url, json=create_request, timeout=10)
+        response = requests.post(url, json=create_request, headers=get_auth_headers(), timeout=10, verify=False)
         response.raise_for_status()
         data = response.json()
         

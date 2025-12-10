@@ -4,11 +4,11 @@ info:
   description: API for managing vision datasets, training runs, epochs, configurations, and analysis data
   version: 1.0.0
   contact:
-    name: Tumbaland Team
+    name: Visin Team
 servers:
   - url: http://localhost:4010/api
     description: Development server
-  - url: https://vision-api.tumbaland.eu/api
+  - url: https://vision-api.visin.eu/api
     description: Production server
 
 tags:
@@ -34,6 +34,12 @@ tags:
     description: Model benchmark results and performance metrics
   - name: Comparisons
     description: Training/test/benchmark comparison management
+  - name: API Tokens
+    description: API token management for programmatic access
+  - name: Projects
+    description: Project management for organizing experiments
+  - name: Image Categories
+    description: Image category management for dataset organization
 
 components:
   schemas:
@@ -49,6 +55,104 @@ components:
       required:
         - success
         - message
+
+    ApiToken:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          example: "My API Token"
+        tokenHash:
+          type: string
+          description: "Hashed token value (not returned in responses)"
+        isActive:
+          type: boolean
+          example: true
+        expiresAt:
+          type: string
+          format: date-time
+          example: "2024-12-31T23:59:59.000Z"
+        lastUsedAt:
+          type: string
+          format: date-time
+          example: "2023-12-01T10:00:00.000Z"
+        createdBy:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        projectId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - name
+        - isActive
+        - createdBy
+
+    Project:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          example: "Autonomous Driving Project"
+        description:
+          type: string
+          example: "Research project for autonomous driving perception"
+        owner:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        members:
+          type: array
+          items:
+            type: string
+          example: ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - name
+        - owner
+
+    ImageCategory:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          example: "Vehicle"
+        description:
+          type: string
+          example: "Images containing vehicles"
+        color:
+          type: string
+          example: "#FF0000"
+        datasetId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - name
+        - datasetId
 
     Dataset:
       type: object
@@ -1540,6 +1644,15 @@ components:
       required:
         - success
         - data
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: JWT token for user authentication or API token for programmatic access. Both are passed in the Authorization header as 'Bearer <token>'
+
+security:
+  - bearerAuth: []
 
 paths:
   # Dataset Analysis Endpoints
@@ -4586,6 +4699,59 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /comparisons/uuid/{uuid}:
+    get:
+      tags:
+        - Comparisons
+      summary: Get comparison by UUID
+      description: Retrieve a specific comparison by UUID
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Comparison UUID
+      responses:
+        '200':
+          description: Comparison retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Comparison not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /comparisons/stats:
+    get:
+      tags:
+        - Comparisons
+      summary: Get comparison statistics
+      description: Retrieve statistics about comparisons
+      responses:
+        '200':
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /comparisons/{id}:
     get:
       tags:
@@ -4678,6 +4844,617 @@ paths:
                 $ref: '#/components/schemas/SuccessResponse'
         '404':
           description: Comparison not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Project Endpoints
+  /projects:
+    get:
+      tags:
+        - Projects
+      summary: Get all projects
+      description: Retrieve all projects accessible to the user
+      responses:
+        '200':
+          description: Projects retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
+                required:
+                  - success
+                  - data
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - Projects
+      summary: Create project
+      description: Create a new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Autonomous Driving Project"
+                description:
+                  type: string
+                  example: "Research project for autonomous driving perception"
+              required:
+                - name
+      responses:
+        '201':
+          description: Project created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /projects/{id}:
+    get:
+      tags:
+        - Projects
+      summary: Get project by ID
+      description: Retrieve a specific project by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID
+      responses:
+        '200':
+          description: Project retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - Projects
+      summary: Update project
+      description: Update a project by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Updated Project Name"
+                description:
+                  type: string
+                  example: "Updated description"
+      responses:
+        '200':
+          description: Project updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Projects
+      summary: Delete project
+      description: Delete a project by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID
+      responses:
+        '200':
+          description: Project deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Image Category Endpoints
+  /image-categories:
+    get:
+      tags:
+        - Image Categories
+      summary: Get all image categories
+      description: Retrieve all image categories
+      responses:
+        '200':
+          description: Categories retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ImageCategory'
+                required:
+                  - success
+                  - data
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+        - Image Categories
+      summary: Create image category
+      description: Create a new image category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Vehicle"
+                description:
+                  type: string
+                  example: "Images containing vehicles"
+                color:
+                  type: string
+                  example: "#FF0000"
+                datasetId:
+                  type: string
+                  example: "507f1f77bcf86cd799439011"
+              required:
+                - name
+                - datasetId
+      responses:
+        '201':
+          description: Category created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /image-categories/dataset/{datasetId}:
+    get:
+      tags:
+        - Image Categories
+      summary: Get categories by dataset
+      description: Retrieve all image categories for a specific dataset
+      parameters:
+        - name: datasetId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Dataset ID
+      responses:
+        '200':
+          description: Categories retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ImageCategory'
+                required:
+                  - success
+                  - data
+        '404':
+          description: Dataset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /image-categories/{id}:
+    get:
+      tags:
+        - Image Categories
+      summary: Get category by ID
+      description: Retrieve a specific image category by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Category ID
+      responses:
+        '200':
+          description: Category retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - Image Categories
+      summary: Update category
+      description: Update an image category by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Category ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Updated Category"
+                description:
+                  type: string
+                  example: "Updated description"
+                color:
+                  type: string
+                  example: "#00FF00"
+      responses:
+        '200':
+          description: Category updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Image Categories
+      summary: Delete category
+      description: Delete an image category by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Category ID
+      responses:
+        '200':
+          description: Category deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # API Token Endpoints
+  /api-tokens:
+    post:
+      tags:
+        - API Tokens
+      summary: Create API token
+      description: Create a new API token for programmatic access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "My API Token"
+                expiresAt:
+                  type: string
+                  format: date-time
+                  example: "2024-12-31T23:59:59.000Z"
+                projectId:
+                  type: string
+                  example: "507f1f77bcf86cd799439011"
+              required:
+                - name
+      responses:
+        '201':
+          description: API token created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                        description: "The actual API token (only shown once)"
+                        example: "abc123def456"
+                      apiToken:
+                        $ref: '#/components/schemas/ApiToken'
+                required:
+                  - success
+                  - data
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api-tokens/project/{projectId}:
+    get:
+      tags:
+        - API Tokens
+      summary: Get API tokens for project
+      description: Retrieve all API tokens for a specific project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project ID
+      responses:
+        '200':
+          description: API tokens retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiToken'
+                required:
+                  - success
+                  - data
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api-tokens/{id}:
+    delete:
+      tags:
+        - API Tokens
+      summary: Revoke API token
+      description: Revoke an API token by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: API token ID
+      responses:
+        '200':
+          description: API token revoked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: API token not found
           content:
             application/json:
               schema:

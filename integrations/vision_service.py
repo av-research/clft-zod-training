@@ -3,8 +3,19 @@ import json
 from datetime import datetime
 import uuid
 import os
+from dotenv import load_dotenv
 
-VISION_API_BASE_URL = "https://vision-api.tumbaland.eu/api"
+# Load environment variables from .env file
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
+
+VISION_API_BASE_URL = "https://vision-api.visin.eu/api"
+
+def get_auth_headers():
+    """Get authorization headers for API requests."""
+    token = os.getenv('VISIN_TOKEN')
+    if token:
+        return {'Authorization': f'Bearer {token}'}
+    return {}
 
 def get_training_by_uuid(training_uuid):
     """
@@ -19,7 +30,7 @@ def get_training_by_uuid(training_uuid):
     url = f"{VISION_API_BASE_URL}/trainings/uuid/{training_uuid}"
     
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, headers=get_auth_headers(), timeout=10)
         response.raise_for_status()
         data = response.json()
         if data.get("success"):
@@ -73,7 +84,7 @@ def create_training(uuid, name, model, dataset, description=None, status="runnin
         payload["tags"] = tags
     
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, headers=get_auth_headers(), timeout=10)
         response.raise_for_status()
         data = response.json()
         if data.get("success"):
@@ -112,7 +123,7 @@ def send_epoch_results_from_file(training_id, epoch_num, results_file_path):
         
         url = f"{VISION_API_BASE_URL}/epochs/upload"
         
-        response = requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, headers=get_auth_headers(), timeout=10)
         response.raise_for_status()
         data = response.json()
         if data.get("success"):
@@ -165,7 +176,7 @@ def create_config(name, config_data, config_uuid=None):
     
     try:
         print(f"Creating config with config_name={config_name}, Summary={summary}")
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, headers=get_auth_headers(), timeout=30)
         response.raise_for_status()
         data = response.json()
         if data.get("success"):
@@ -201,7 +212,7 @@ def send_test_results_from_file(results_file_path):
         
         url = f"{VISION_API_BASE_URL}/test-results/upload"
         
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, headers=get_auth_headers(), timeout=30)
         response.raise_for_status()
         data = response.json()
         if data.get("success"):
@@ -264,7 +275,7 @@ def send_benchmark_results_from_file(results_file_path, training_uuid=None, epoc
         
         url = f"{VISION_API_BASE_URL}/benchmarks"
         
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, headers=get_auth_headers(), timeout=30, verify=False)
         response.raise_for_status()
         response_data = response.json()
         if response_data.get("success"):
@@ -331,7 +342,7 @@ def upload_visualization(epoch_uuid, file_path, viz_type, metadata=None):
         }
         
         url = f"{VISION_API_BASE_URL}/visualizations/upload-url"
-        response = requests.post(url, json=upload_url_request, timeout=10)
+        response = requests.post(url, json=upload_url_request, headers=get_auth_headers(), timeout=10, verify=False)
         response.raise_for_status()
         data = response.json()
         
@@ -368,90 +379,7 @@ def upload_visualization(epoch_uuid, file_path, viz_type, metadata=None):
             create_request["metadata"] = metadata
         
         url = f"{VISION_API_BASE_URL}/visualizations"
-        response = requests.post(url, json=create_request, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        
-        if data.get("success"):
-            print(f"Successfully uploaded {viz_type} visualization: {filename}")
-            return data.get("data")
-        else:
-            print(f"Failed to create visualization record: {data.get('message')}")
-            return None
-            
-    except requests.exceptions.RequestException as e:
-        print(f"Request failed when uploading visualization: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            print(f"Response status: {e.response.status_code}")
-            print(f"Response body: {e.response.text}")
-        return None
-    except Exception as e:
-        print(f"Unexpected error when uploading visualization: {e}")
-        return None
-        print(f"File not found: {file_path}")
-        return None
-    
-    filename = os.path.basename(file_path)
-    file_size = os.path.getsize(file_path)
-    
-    # Determine mimetype based on extension
-    ext = os.path.splitext(file_path)[1].lower()
-    mimetype_map = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg'
-    }
-    mimetype = mimetype_map.get(ext, 'image/png')
-    
-    try:
-        # Step 1: Get signed upload URL
-        viz_uuid = str(uuid.uuid4())
-        upload_url_request = {
-            "epoch_uuid": epoch_uuid,
-            "filename": filename,
-            "type": viz_type,
-            "mimetype": mimetype
-        }
-        
-        url = f"{VISION_API_BASE_URL}/visualizations/upload-url"
-        response = requests.post(url, json=upload_url_request, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        
-        if not data.get("success"):
-            print(f"Failed to get upload URL: {data.get('message')}")
-            return None
-        
-        upload_url = data["data"]["uploadUrl"]
-        viz_uuid = data["data"]["visualization_uuid"]
-        minio_file_id = data["data"]["minioFileId"]
-        
-        # Step 2: Upload file to MinIO
-        with open(file_path, 'rb') as f:
-            upload_response = requests.put(
-                upload_url, 
-                data=f,
-                headers={'Content-Type': mimetype},
-                timeout=30
-            )
-            upload_response.raise_for_status()
-        
-        # Step 3: Create visualization record
-        create_request = {
-            "epoch_uuid": epoch_uuid,
-            "visualization_uuid": viz_uuid,
-            "filename": filename,
-            "type": viz_type,
-            "minioFileId": minio_file_id,
-            "mimetype": mimetype,
-            "size": file_size
-        }
-        
-        if metadata:
-            create_request["metadata"] = metadata
-        
-        url = f"{VISION_API_BASE_URL}/visualizations"
-        response = requests.post(url, json=create_request, timeout=10)
+        response = requests.post(url, json=create_request, headers=get_auth_headers(), timeout=10, verify=False)
         response.raise_for_status()
         data = response.json()
         
