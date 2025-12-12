@@ -75,13 +75,12 @@ def process_images(model, data_loader, visualizer, image_paths, dataroot,
         anno_path = get_annotation_path(cam_path, dataset_name, config)
         lidar_path = get_lidar_path(cam_path, dataset_name)
 
-        # Check if camera image exists
-        if not os.path.exists(cam_path):
+        # Check if required files exist
+        if modality in ['rgb', 'fusion'] and not os.path.exists(cam_path):
             print(f'Warning: Camera image not found: {cam_path}')
             continue
-
-        # Check if LiDAR is needed and exists
-        if modality == 'fusion' and not os.path.exists(lidar_path):
+        
+        if modality in ['lidar', 'fusion'] and not os.path.exists(lidar_path):
             print(f'Warning: LiDAR file not found: {lidar_path}')
             continue
 
@@ -95,12 +94,16 @@ def process_images(model, data_loader, visualizer, image_paths, dataroot,
 
         # Load data
         print(f'Processing image {idx}/{len(image_paths)}: {rgb_name}')
-        rgb = data_loader.load_rgb(cam_path).to(device, non_blocking=True).unsqueeze(0)
-
-        if modality == 'fusion':
-            lidar = data_loader.load_lidar(lidar_path).to(device, non_blocking=True).unsqueeze(0)
-        else:
+        
+        if modality == 'rgb':
+            rgb = data_loader.load_rgb(cam_path).to(device, non_blocking=True).unsqueeze(0)
             lidar = None
+        elif modality == 'lidar':
+            rgb = None
+            lidar = data_loader.load_lidar(lidar_path).to(device, non_blocking=True).unsqueeze(0)
+        else:  # fusion
+            rgb = data_loader.load_rgb(cam_path).to(device, non_blocking=True).unsqueeze(0)
+            lidar = data_loader.load_lidar(lidar_path).to(device, non_blocking=True).unsqueeze(0)
 
         # Run inference
         with torch.no_grad():

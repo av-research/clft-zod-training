@@ -16,6 +16,11 @@ sbatch -J t-hs train_deeplabv3plus.slurm config/waymo/deeplabv3/rgb_human_sign.j
 sbatch -J t-hv train_deeplabv3plus.slurm config/waymo/deeplabv3/rgb_human_vehicle.json
 sbatch -J t-vs train_deeplabv3plus.slurm config/waymo/deeplabv3/rgb_vehicle_sign.json
 
+sbatch -J t-1 train_deeplabv3plus.slurm config/zod/deeplabv3/lidar_baseline.json
+sbatch -J t-2 train_deeplabv3plus.slurm config/zod/deeplabv3/deeplabv3plus_fusion_average.json
+sbatch -J t-3 train_deeplabv3plus.slurm config/zod/deeplabv3/deeplabv3plus_fusion_learned.json
+sbatch -J t-4 train_deeplabv3plus.slurm config/zod/deeplabv3/deeplabv3plus_fusion_weighted.json
+
 python visualize_deeplabv3plus.py --config config/waymo/deeplabv3/rgb_baseline.json --upload
 python visualize_deeplabv3plus.py --config config/waymo/deeplabv3/rgb_sign_specialization.json --upload
 python visualize_deeplabv3plus.py --config config/waymo/deeplabv3/rgb_human_specialization.json --upload
