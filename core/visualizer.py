@@ -7,7 +7,7 @@ import os
 import cv2
 import torch
 import numpy as np
-from utils.helpers import draw_test_segmentation_map, image_overlay, relabel_annotation
+from utils.helpers import draw_test_segmentation_map, relabel_annotation
 
 
 class Visualizer:
@@ -66,17 +66,17 @@ class Visualizer:
         cv2.imwrite(seg_path, seg_resize_bgr)
         
         # Save overlay (rgb_cv2 is BGR, seg_resize_bgr is BGR)
-        overlay = image_overlay(rgb_cv2, seg_resize_bgr)
+        overlay = self._create_overlay(rgb_cv2, seg_resize_bgr, alpha=0.6)
         overlay_path = self._get_output_path('overlay', rgb_path)
         print(f'Saving overlay result {idx}...')
         cv2.imwrite(overlay_path, overlay)
         
         # Save comparison and correct_only if annotation exists
         if os.path.exists(anno_path):
-            self._save_comparison(output_seg, seg_resize_bgr, rgb_path, anno_path, 
+            self._save_comparison(output_seg, seg_resize_bgr, rgb_cv2, rgb_path, anno_path, 
                                  h, w, idx)
     
-    def _save_comparison(self, output_seg, seg_resize, rgb_path, anno_path, 
+    def _save_comparison(self, output_seg, seg_resize, rgb_cv2, rgb_path, anno_path, 
                         h, w, idx):
         """Save comparison and correct_only visualizations."""
         # Load and process ground truth
@@ -115,15 +115,40 @@ class Visualizer:
         print(f'Saving comparison result {idx}...')
         cv2.imwrite(compare_path, comparison)
         
-        # Create correct_only - show only correctly predicted pixels (black out ALL incorrect)
-        correct_only = seg_resize.copy()
+        # Create correct_only - show only correctly predicted pixels on original image
+        correct_only_segmented = seg_resize.copy()
         all_incorrect_mask = (pred_labels != gt_relabeled)  # All mismatches, including background
-        correct_only[all_incorrect_mask] = [0, 0, 0]
+        correct_only_segmented[all_incorrect_mask] = [0, 0, 0]
+        
+        # Overlay correct predictions on original image with transparency (like overlay)
+        correct_only_overlay = self._create_overlay(rgb_cv2, correct_only_segmented, alpha=0.6)
         
         correct_only_path = self._get_output_path('correct_only', rgb_path)
         print(f'Saving correct_only result {idx}...')
-        cv2.imwrite(correct_only_path, correct_only)
+        cv2.imwrite(correct_only_path, correct_only_overlay)
     
+    def _create_overlay(self, image, segmented_image, alpha=0.6):
+        """
+        Create overlay with transparent masks on original image.
+        Both image and segmented_image should be in BGR format.
+        
+        Args:
+            image: Original image
+            segmented_image: Segmented image to overlay
+            alpha: Transparency level (1.0 = no dimming, 0.0 = fully transparent)
+        """
+        # Create a copy of the original image
+        overlay = image.copy().astype(np.float32)
+
+        # Find non-black pixels in segmented image (predicted classes)
+        # Background is black [0, 0, 0] in BGR
+        mask = np.any(segmented_image != [0, 0, 0], axis=2)
+
+        # Apply alpha blending only to predicted regions
+        overlay[mask] = alpha * segmented_image[mask].astype(np.float32) + (1 - alpha) * overlay[mask]
+
+        return overlay.astype(np.uint8)
+
     def _get_output_path(self, output_type, input_path):
         """Get output path for a given visualization type."""
         filename = os.path.basename(input_path)
